@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Space Gacha Event Simulator</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@500;600;700;800&family=Russo+One&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <!-- GSAP CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <!-- Three.js 3D WebGL Engine -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Google Model-Viewer for 3D GLB Rendering -->
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+</head>
+<body>
+
+  <!-- Background Ambient Glow -->
+  <div class="space-desktop-bg">
+    <div class="glow-orb glow-1"></div>
+    <div class="glow-orb glow-2"></div>
+  </div>
+
+  <!-- Main Desktop Wrapper -->
+  <div class="desktop-container">
+    
+    <!-- Left Sidebar: Info & Controls -->
+    <div class="control-panel">
+      <div class="logo-area">
+        <h1 class="brand-title">VECTOR</h1>
+        <span class="brand-subtitle">Space Gacha Simulator</span>
+      </div>
+      
+      <div class="info-card">
+        <h3>Simulator Info</h3>
+        <p>This is a high-fidelity interactive simulation of the Space Gacha/Event game UI.</p>
+        <div class="wallet-status">
+          <div class="currency-item">
+            <span class="coin-icon gold">🪙</span>
+            <div>
+              <span class="curr-label">Gold Coins</span>
+              <span class="curr-val" id="user-gold">5,000,000</span>
+            </div>
+          </div>
+          <div class="currency-item">
+            <span class="coin-icon silver">🪙</span>
+            <div>
+              <span class="curr-label">Silver Coins</span>
+              <span class="curr-val" id="user-silver">800,000</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-buttons-left">
+        <button class="btn btn-primary" id="btn-add-coins">Mock +1M Coins</button>
+        <button class="btn btn-ghost" id="btn-toggle-audio">Toggle Audio Synth: ON</button>
+      </div>
+
+      <div class="instructions" id="tuner-panel">
+        <h4>3D Engine Live Tuner</h4>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+          <div>
+            <label style="font-size: 10px; color: var(--gold-primary); display: flex; justify-content: space-between;">
+              <span>PITCH (X):</span> <span id="val-pitch">90°</span>
+            </label>
+            <input type="range" id="tune-pitch" min="0" max="360" value="90" style="width: 100%; accent-color: var(--gold-primary);">
+          </div>
+          <div>
+            <label style="font-size: 10px; color: var(--gold-primary); display: flex; justify-content: space-between;">
+              <span>ROLL (Y):</span> <span id="val-roll">0°</span>
+            </label>
+            <input type="range" id="tune-roll" min="0" max="360" value="0" style="width: 100%; accent-color: var(--gold-primary);">
+          </div>
+          <div>
+            <label style="font-size: 10px; color: var(--gold-primary); display: flex; justify-content: space-between;">
+              <span>YAW (Z):</span> <span id="val-yaw">0°</span>
+            </label>
+            <input type="range" id="tune-yaw" min="0" max="360" value="0" style="width: 100%; accent-color: var(--gold-primary);">
+          </div>
+          <div>
+            <label style="font-size: 10px; color: var(--gold-primary); display: flex; justify-content: space-between;">
+              <span>FLAME OFFSET:</span> <span id="val-flame">90px</span>
+            </label>
+            <input type="range" id="tune-flame" min="0" max="150" value="90" style="width: 100%; accent-color: var(--gold-primary);">
+          </div>
+          <div>
+            <label style="font-size: 10px; color: var(--gold-primary); display: flex; justify-content: space-between;">
+              <span>METALNESS:</span> <span id="val-metal">0.90</span>
+            </label>
+            <input type="range" id="tune-metal" min="0" max="1" step="0.05" value="0.9" style="width: 100%; accent-color: var(--gold-primary);">
+          </div>
+          <div>
+            <label style="font-size: 10px; color: var(--gold-primary); display: flex; justify-content: space-between;">
+              <span>ROUGHNESS:</span> <span id="val-rough">0.25</span>
+            </label>
+            <input type="range" id="tune-rough" min="0" max="1" step="0.05" value="0.25" style="width: 100%; accent-color: var(--gold-primary);">
+          </div>
+          <div style="margin-top: 4px; padding: 6px; background: rgba(0,0,0,0.5); border: 1px solid rgba(229,169,59,0.2);">
+            <div style="font-size: 8px; color: #8c91ab; font-family: var(--f-mono); word-break: break-all; white-space: pre-wrap;" id="tune-config-output">Config will appear here</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phone Simulator (Mock Device Frame) -->
+    <div class="phone-frame">
+      <div class="phone-notch">
+        <div class="dynamic-island"></div>
+      </div>
+      
+      <!-- Phone Viewport -->
+      <div class="phone-screen" id="phone-screen-viewport">
+        <!-- Rotating space background image -->
+        <div class="bg-space-image"></div>
+        
+        <!-- Starfield Canvas overlay -->
+        <canvas id="starfield-canvas"></canvas>
+
+        <!-- Sci-Fi HUD Corner Brackets & Diagnostics -->
+        <div class="hud-bracket top-left"></div>
+        <div class="hud-bracket top-right"></div>
+        <div class="hud-bracket bottom-left"></div>
+        <div class="hud-bracket bottom-right"></div>
+        <div class="hud-diagnostics-left">SYS_STATUS: ACTIVE<br>SHIELD: 100%<br>ALT: 12,450M</div>
+        <div class="hud-diagnostics-right">CORE: STABLE<br>PLASMA: 10450C<br>LOC: SECTOR_</div>
+        <!-- Top Status Sim Bar -->
+        <div class="top-status-header">
+          <span class="status-time">10:39</span>
+          <div class="status-right-icons">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="status-icon"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="status-icon"><path d="M5 12.5a3.5 3.5 0 1 1 7 0 3.5 3.5 0 1 1-7 0"/><path d="M12 12.5a3.5 3.5 0 1 1 7 0 3.5 3.5 0 1 1-7 0"/></svg>
+            <span class="status-battery">68%</span>
+          </div>
+        </div>
+
+        <!-- TOP BAR: User Capsule & Direct Actions -->
+        <div class="top-main-nav">
+          <div class="profile-capsule">
+            <div class="profile-avatar-wrap">
+              <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80" alt="Avatar">
+              <div class="profile-level-badge">1</div>
+            </div>
+            <span class="profile-id-text">830</span>
+            <div class="profile-rocket-badge">
+              <img src="assets/ship_lv1.png?v=4" alt="rocket" style="width: 14px; height: 14px; object-fit: contain;">
+            </div>
+            <button class="profile-go-btn">Go</button>
+          </div>
+          
+          <div class="header-right-actions">
+            <!-- Share Icon -->
+            <button class="icon-btn" id="btn-share" title="Share">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+            </button>
+            <!-- Power/Quit Icon -->
+            <button class="icon-btn" id="btn-quit" title="Exit">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- LUCKY BAG EVENT BANNER -->
+        <div class="lucky-bag-banner">
+          <div class="banner-decor-bg"></div>
+          <div class="banner-left-avatar">
+            <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=80&q=80" alt="User">
+          </div>
+          <div class="banner-mid-info">
+            <span class="banner-title-label">REHAN's Lucky Bag</span>
+            <div class="banner-count-badge">2</div>
+          </div>
+          <button class="banner-go-btn">Go</button>
+        </div>
+
+        <!-- MAIN VIEWPORT: Spaceship Display -->
+        <div class="battlefield-area">
+          
+          <!-- FLOATING AUDIO VOICE ROOM SLOTS (Floating behind spacecraft) -->
+          <div class="floating-voice-slots">
+            <div class="floating-voice-avatar avatar-1">
+              <div class="avatar-circle">
+                <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=80&q=80" alt="Azza">
+                <div class="slot-mic-icon">🎤</div>
+              </div>
+              <span class="avatar-label">Azza</span>
+            </div>
+            <div class="floating-voice-avatar avatar-2">
+              <div class="avatar-circle">
+                <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=80&q=80" alt="No.8">
+                <div class="slot-mic-icon">🎤</div>
+              </div>
+              <span class="avatar-label">No.8</span>
+            </div>
+            <div class="floating-voice-avatar avatar-3">
+              <div class="avatar-circle">
+                <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=80&q=80" alt="lover boy">
+                <div class="slot-mic-icon">🎤</div>
+              </div>
+              <span class="avatar-label">lover boy</span>
+            </div>
+          </div>
+
+          <!-- FLOATING CONTROLS: Help / Records -->
+          <button class="floating-help-btn" id="btn-help">?</button>
+          <button class="floating-record-btn" id="btn-records-modal">Record &gt;</button>
+
+          <!-- Spaceship Display & Pedestal -->
+          <div class="spaceship-stage">
+            <div class="blast-beam"></div>
+            
+            <!-- LEVEL SELECTOR (Vertical Badges stacked LV4 down to LV1) -->
+            <div class="level-selector">
+              <button class="lv-badge active" data-lv="4">
+                <div class="lv-badge-card">
+                  <img src="assets/ship_lv2.png?v=6" class="lv-badge-thumb" alt="LV4">
+                  <div class="lv-badge-label">LV.4</div>
+                </div>
+              </button>
+              <button class="lv-badge" data-lv="3">
+                <div class="lv-badge-card">
+                  <img src="assets/ship_lv3.png?v=6" class="lv-badge-thumb" alt="LV3">
+                  <div class="lv-badge-label">LV.3</div>
+                </div>
+              </button>
+              <button class="lv-badge" data-lv="2">
+                <div class="lv-badge-card">
+                  <img src="assets/ship_lv4.png?v=6" class="lv-badge-thumb" alt="LV2">
+                  <div class="lv-badge-label">LV.2</div>
+                </div>
+              </button>
+              <button class="lv-badge" data-lv="1">
+                <div class="lv-badge-card">
+                  <img src="assets/ship_lv1.png?v=6" class="lv-badge-thumb" alt="LV1">
+                  <div class="lv-badge-label">LV.1</div>
+                </div>
+              </button>
+            </div>
+
+            <div class="pedestal-container" id="pedestal-element">
+              <img src="assets/pedestal.png?v=3" class="pedestal-img" alt="Pedestal">
+              <div class="pedestal-tech-ring">
+                <svg viewBox="0 0 100 30" style="width: 100%; height: 100%; display: block; overflow: visible;">
+                  <ellipse cx="50" cy="15" rx="46" ry="11" stroke="var(--level-color)" stroke-width="1.5" stroke-dasharray="12 8" fill="none" style="filter: drop-shadow(0 0 5px var(--level-glow)); transition: stroke 0.3s ease, filter 0.3s ease;"/>
+                  <ellipse cx="50" cy="15" rx="38" ry="9" stroke="var(--level-color)" stroke-width="0.8" stroke-opacity="0.65" fill="none" style="transition: stroke 0.3s ease;"/>
+                  <path d="M 6 15 L 12 15 M 88 15 L 94 15 M 50 1.5 L 50 4.5" stroke="var(--level-color)" stroke-width="1.5" style="transition: stroke 0.3s ease;"/>
+                </svg>
+              </div>
+              <div class="pedestal-glow"></div>
+              <div class="shockwave-ring" id="shockwave"></div>
+              <div class="hologram-cone" id="hologram"></div>
+            </div>
+            
+            <div class="spaceship-wrapper" id="spaceship-container">
+              <!-- Animated thruster flames behind ship -->
+              <div class="thruster-flame-container" id="flame-effect">
+                <div class="core-flame"></div>
+                <div class="sparks-container"></div>
+              </div>
+              <img src="assets/ship_lv2.png?v=6" class="spaceship-img float-anim" id="spaceship-view-img" alt="Spaceship" style="position: absolute; width: 100%; height: 100%; object-fit: contain; z-index: 4; pointer-events: none; transition: transform 0.15s ease-out, opacity 0.4s ease;">
+            </div>
+            <div class="flash-overlay" id="launch-flash" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, #ffffff 10%, #00e5ff 60%, transparent 100%); z-index: 9; opacity: 0; pointer-events: none; mix-blend-mode: screen; filter: blur(5px);"></div>
+
+            <!-- Flying label overlay -->
+            <div class="owner-pill" id="owner-name-tag">
+              <div class="avatar-sm"></div>
+              <span>lover boy</span>
+            </div>
+          </div>
+
+          <!-- PROGRESS BAR TUBE (Right - Styled as Thunderbolt Power Cell) -->
+          <div class="progress-bar-container">
+            <div class="progress-percent" id="bar-percentage">0%</div>
+            <div class="progress-tube">
+              <div class="progress-fill" id="bar-fill" style="height: 0%;"></div>
+              <div class="bubble-particle-emitter"></div>
+            </div>
+            <div class="progress-thunder-btn">
+              <span class="thunder-icon">⚡</span>
+            </div>
+          </div>
+
+          <!-- MIDDLE STATUS: Countdown -->
+          <div class="middle-status-row">
+            <div class="countdown-panel">
+              <span class="countdown-label">Reset countdown</span>
+              <div class="timer-digits">
+                <span class="digit-box" id="time-hours">15</span>
+                <span class="digit-separator">:</span>
+                <span class="digit-box" id="time-mins">18</span>
+                <span class="digit-separator">:</span>
+                <span class="digit-box" id="time-secs">17</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- BOTTOM PANEL: Rewards & Action (Styled exactly like the Cyan Cyberpunk Reward frame) -->
+        <div class="rewards-section">
+          
+          <div class="rewards-section-title">
+            <span>Reward</span>
+          </div>
+
+          <!-- Tabs Header -->
+          <div class="tabs-header">
+            <div class="tab-item active" data-tab="top1">TOP1</div>
+            <div class="tab-item" data-tab="top2">TOP2</div>
+            <div class="tab-item" data-tab="top3">TOP3</div>
+          </div>
+
+          <!-- Tab Contents (Grid of 4 Reward Cards) -->
+          <div class="reward-grid" id="reward-cards-grid">
+            <!-- Card 1: Booster Chance / Yacht -->
+            <div class="reward-card-wrapper">
+              <div class="reward-card" data-card="1">
+                <div class="chance-tag" id="chance-badge">45% Possibility</div>
+                <div class="card-inner">
+                  <div class="reward-icon-wrap">
+                    <img src="assets/golden_yacht.png" class="reward-img-thumbnail" alt="Yacht">
+                  </div>
+                </div>
+              </div>
+              <div class="reward-value" id="card-val-1">1000000</div>
+            </div>
+
+            <!-- Card 2: Gold Coins Pile -->
+            <div class="reward-card-wrapper">
+              <div class="reward-card" data-card="2">
+                <div class="card-inner">
+                  <div class="reward-icon-wrap">
+                    <img src="assets/gold_coins.png" class="reward-img-thumbnail" alt="Coins">
+                  </div>
+                </div>
+              </div>
+              <div class="reward-value" id="card-val-2">1000000</div>
+            </div>
+
+            <!-- Card 3: EXP Card -->
+            <div class="reward-card-wrapper">
+              <div class="reward-card" data-card="3">
+                <div class="card-inner">
+                  <div class="reward-icon-wrap">
+                    <img src="assets/exp_card.png" class="reward-img-thumbnail" alt="EXP">
+                  </div>
+                </div>
+              </div>
+              <div class="reward-value" id="card-val-3">6000000</div>
+            </div>
+
+            <!-- Card 4: Spaceship skin (Dynamic level icon) -->
+            <div class="reward-card-wrapper">
+              <div class="reward-card" data-card="4">
+                <div class="card-inner">
+                  <div class="reward-icon-wrap">
+                    <img src="assets/ship_lv2.png" class="reward-img-thumbnail" id="card-img-ship" alt="Ship Thumbnail">
+                  </div>
+                </div>
+              </div>
+              <div class="reward-value" id="card-val-4">X 4</div>
+            </div>
+          </div>
+
+          <!-- Bottom Action Buttons: Spin & Ranking (Both styled as cyan trapezoidal buttons) -->
+          <div class="action-footer">
+            <button class="btn-action-primary" id="btn-spin">
+              <span class="btn-glow-bar"></span>
+              <span class="btn-action-text" id="action-btn-label">LAUNCH (10,000 COINS)</span>
+            </button>
+            <button class="btn-action-sub" id="btn-ranking-trigger">
+              Ranking
+            </button>
+          </div>
+          </div>
+
+        </div>
+
+        <!-- MODAL 1: Leaderboard (Ranking) Overlay -->
+        <div class="modal-overlay" id="modal-ranking">
+          <div class="modal-container">
+            <div class="modal-header">
+              <h3>🏆 TOP CHAMPIONS</h3>
+              <button class="modal-close" id="btn-close-ranking">&times;</button>
+            </div>
+            <div class="modal-body scrollable">
+              <div class="podium-section">
+                <div class="podium-step step-2">
+                  <div class="podium-avatar">
+                    <img src="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=100&q=80" alt="Rank 2">
+                  </div>
+                  <span class="podium-name">Ayaan</span>
+                  <span class="podium-coins">9.2M GC</span>
+                  <div class="podium-block">2</div>
+                </div>
+                <div class="podium-step step-1">
+                  <div class="podium-crown">👑</div>
+                  <div class="podium-avatar ring-gold">
+                    <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=100&q=80" alt="Rank 1">
+                  </div>
+                  <span class="podium-name">Kabir Singh</span>
+                  <span class="podium-coins">14.5M GC</span>
+                  <div class="podium-block">1</div>
+                </div>
+                <div class="podium-step step-3">
+                  <div class="podium-avatar">
+                    <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=100&q=80" alt="Rank 3">
+                  </div>
+                  <span class="podium-name">Riya</span>
+                  <span class="podium-coins">5.8M GC</span>
+                  <div class="podium-block">3</div>
+                </div>
+              </div>
+              <ul class="ranking-list">
+                <li class="ranking-item">
+                  <span class="rank-num">4</span>
+                  <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=80&q=80" alt="User" class="rank-avatar">
+                  <span class="rank-name">Vikram</span>
+                  <span class="rank-score">4,200,000 Coins</span>
+                </li>
+                <li class="ranking-item">
+                  <span class="rank-num">5</span>
+                  <img src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=80&q=80" alt="User" class="rank-avatar">
+                  <span class="rank-name">Nisha</span>
+                  <span class="rank-score">3,900,000 Coins</span>
+                </li>
+                <li class="ranking-item">
+                  <span class="rank-num">6</span>
+                  <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=80&q=80" alt="User" class="rank-avatar">
+                  <span class="rank-name">lover boy</span>
+                  <span class="rank-score" id="user-rank-score">2,100,000 Coins</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODAL 2: Records Modal -->
+        <div class="modal-overlay" id="modal-records">
+          <div class="modal-container">
+            <div class="modal-header">
+              <h3>📜 LAUNCH LOGS</h3>
+              <button class="modal-close" id="btn-close-records">&times;</button>
+            </div>
+            <div class="modal-body scrollable">
+              <div class="records-empty" id="records-empty-state">
+                <div class="records-empty-icon">🚀</div>
+                <p>Aapne abhi tak koi launch nahi kiya hai. Apni spaceship fly karein aur logs yahan dekhein!</p>
+              </div>
+              <ul class="records-list" id="records-list-element" style="display: none;">
+                <!-- Records injected here dynamically -->
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODAL 3: Help Rules Modal -->
+        <div class="modal-overlay" id="modal-help">
+          <div class="modal-container">
+            <div class="modal-header">
+              <h3>ℹ️ EVENT RULES</h3>
+              <button class="modal-close" id="btn-close-help">&times;</button>
+            </div>
+            <div class="modal-body scrollable">
+              <div class="rules-content">
+                <h4>1. Spaceship Level:</h4>
+                <p>Har Level ki spaceship higher tier rewards unlock karti hai. Level switch karne ke liye left buttons use karein.</p>
+                <h4>2. Mauka (Winning Chance):</h4>
+                <p>Booster reward milne ka chance ("mauka") spaceship Level badhne ke saath badhta hai:</p>
+                <table class="rules-table">
+                  <tr><th>Level</th><th>Chance (Mauka)</th><th>Durations</th></tr>
+                  <tr><td>LV1</td><td>10%</td><td>1 Day</td></tr>
+                  <tr><td>LV2</td><td>20%</td><td>2 Days</td></tr>
+                  <tr><td>LV3</td><td>40%</td><td>3 Days</td></tr>
+                  <tr><td>LV4</td><td>60%</td><td>4 Days</td></tr>
+                  <tr><td>LV5</td><td>80%</td><td>7 Days</td></tr>
+                </table>
+                <h4>3. Progress Tube:</h4>
+                <p>Har flight ke baad tube energy badhegi. 100% hone par special "Lucky Box" trigger hoga!</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- GACHA SPIN REVEAL OVERLAY -->
+        <div class="gacha-reveal-overlay" id="gacha-reveal">
+          <div class="reveal-particles"></div>
+          <div class="reveal-card-container">
+            <div class="reveal-title-text">SUCCESSFUL WARP DRAW!</div>
+            <div class="glowing-reward-reveal-card" id="reveal-card-visual">
+              <!-- Reward card inner shown here -->
+            </div>
+            <button class="btn btn-primary" id="btn-reveal-claim">CLAIM REWARD</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
