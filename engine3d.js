@@ -15,16 +15,21 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 /* ---------------------------------------------------------------- palette */
 
 // The WebGL canvas spans the whole phone, but the ship must read inside the
-// stage band — above the countdown row, below the event banner. A LEVEL camera
-// dropped below the ship puts the assembly in the upper 40% with no keystoning,
-// and gives the slightly-from-below hero angle rockets want.
-// Framed so the full assembly (nose +2.8 .. pedestal base -4.7, centre -0.95)
-// lands inside the stage band rather than spilling behind the countdown row.
-const CAM_Y = -2.95;
-const CAM_Z = 26.5;
+// stage band — above the countdown row, below the event banner. _frameCamera()
+// auto-fits whatever was just built, so these describe the TARGET: the assembly
+// fills this fraction of the view, centred this far down the screen.
+const FRAME_FILL = 0.44;
+const FRAME_CENTRE = 0.40;
 
-const GOLD = 0xf0a828;
-const GOLD_DEEP = 0xb87415;
+// Where the barrel hands off to the nose cone, as a fraction of hull radius.
+// Kept high: the reference nose is a broad stubby cap, not a narrow spire.
+const NOSE_NECK = 0.72;
+
+// The launch deck burns amber in the reference regardless of ship tier.
+const PAD_GOLD = 0xffb03a;
+
+const GOLD = 0xffb121;
+const GOLD_DEEP = 0xc9781a;
 const HULL_WHITE = 0xdfe9f5;
 const DARK_TRIM = 0x0d1524;
 
@@ -38,13 +43,14 @@ const SHIPS = {
     accent: 0x00e676,
     flameCore: 0xd9ffe9,
     flameEdge: 0x00e676,
-    hull: 0x1f8f5c,
-    height: 4.6,
-    radius: 0.52,
-    noseSharp: 1.55,        // higher = pointier nose
-    finCount: 3,
-    finSpan: 0.85,
-    finSweep: 0.55,
+    hull: 0x17a866,          // vivid painted hull
+    nose: 0x9df5c8,          // pale cap — a clearly lighter cone, as in the ref
+    body: 3.2,               // barrel height (nose is added on top)
+    radius: 0.5,
+    noseLen: 1.05,
+    wings: 3,
+    wingSpan: 0.86,
+    wingDrop: 1.0,
     boosters: 0,
     engines: [{ x: 0, z: 0, r: 0.34 }],
     chevrons: 2,
@@ -55,40 +61,42 @@ const SHIPS = {
     accent: 0xd500f9,
     flameCore: 0xf6d9ff,
     flameEdge: 0xd500f9,
-    hull: 0x5b1f8f,
-    height: 5.0,
-    radius: 0.6,
-    noseSharp: 1.35,
-    finCount: 4,
-    finSpan: 0.95,
-    finSweep: 0.5,
+    hull: 0x8322d6,
+    nose: 0xe9a6ff,
+    body: 3.5,
+    radius: 0.58,
+    noseLen: 1.15,
+    wings: 4,
+    wingSpan: 0.95,
+    wingDrop: 1.1,
     boosters: 2,
-    boosterScale: 0.52,
+    boosterScale: 0.54,
     engines: [
       { x: -0.30, z: 0, r: 0.26 },
       { x: 0.30, z: 0, r: 0.26 }
     ],
     chevrons: 3,
-    bands: 3
+    bands: 2
   },
   3: {
     name: 'HEAVY LIFTER',
     accent: 0xff1744,
     flameCore: 0xffe2d2,
     flameEdge: 0xff4500,
-    hull: 0x8f1f2c,
-    height: 5.4,
-    radius: 0.78,
-    noseSharp: 1.05,
-    finCount: 3,
-    finSpan: 1.25,
-    finSweep: 0.72,
+    hull: 0xd42438,
+    nose: 0xffb0ba,
+    body: 3.7,
+    radius: 0.72,
+    noseLen: 1.15,
+    wings: 3,
+    wingSpan: 1.18,
+    wingDrop: 1.18,
     boosters: 2,
     boosterScale: 0.66,
     engines: [
       { x: 0, z: 0, r: 0.42 },
-      { x: -0.52, z: 0, r: 0.28 },
-      { x: 0.52, z: 0, r: 0.28 }
+      { x: -0.55, z: 0, r: 0.28 },
+      { x: 0.55, z: 0, r: 0.28 }
     ],
     chevrons: 3,
     bands: 3
@@ -98,22 +106,23 @@ const SHIPS = {
     accent: 0x00d5ff,
     flameCore: 0xffffff,
     flameEdge: 0x00b0ff,
-    hull: 0x1552c8,
-    height: 5.6,
-    radius: 0.70,
-    noseSharp: 1.25,
-    finCount: 4,
-    finSpan: 1.15,
-    finSweep: 0.62,
+    hull: 0x1a6ad8,          // the reference's bright royal blue
+    nose: 0x8fdcf5,          // pale cyan nose cap
+    body: 3.7,
+    radius: 0.66,
+    noseLen: 1.2,
+    wings: 4,
+    wingSpan: 1.06,
+    wingDrop: 1.25,
     boosters: 2,
-    boosterScale: 0.6,
+    boosterScale: 0.58,
     engines: [
-      { x: 0, z: 0, r: 0.40 },
-      { x: -0.62, z: 0, r: 0.26 },
-      { x: 0.62, z: 0, r: 0.26 }
+      { x: 0, z: 0, r: 0.38 },
+      { x: -0.60, z: 0, r: 0.25 },
+      { x: 0.60, z: 0, r: 0.25 }
     ],
     chevrons: 4,
-    bands: 3
+    bands: 2
   }
 };
 
@@ -243,7 +252,6 @@ class GachaEngine {
     this.warp = 0;
     this.targetWarp = 0;
     this.isLaunching = false;
-    this.tilt = { x: 0, y: 0 };
     this.shake = 0;
     this.clock = new THREE.Clock();
     this.disposables = [];
@@ -277,8 +285,10 @@ class GachaEngine {
     });
     this.renderer.setSize(w, h);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    // ACES crushes saturation hard — it turned the gold trim tan and the hull
+    // pastel. Neutral keeps the toy-bright palette the reference lives on.
+    this.renderer.toneMapping = THREE.NeutralToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -294,8 +304,20 @@ class GachaEngine {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
     this.camera = new THREE.PerspectiveCamera(34, w / h, 0.1, 400);
-    this.camera.position.set(0, CAM_Y, CAM_Z);
-    this.camera.lookAt(0, CAM_Y, 0);
+    // Provisional — _frameCamera() replaces these once a ship exists.
+    this.camY = 0;
+    this.camZ = 24;
+    this.camera.position.set(0, this.camY, this.camZ);
+    this.camera.lookAt(0, this.camY, 0);
+
+    // The composer writes an opaque frame, so anything behind the canvas in CSS
+    // is invisible. The sky has to live inside the 3D scene to be seen at all.
+    new THREE.TextureLoader().load('assets/bg_space_balloons.png', (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      this.scene.background = tex;
+      this.scene.backgroundIntensity = 0.62;   // sit it behind the ship
+      this.disposables.push(tex);
+    });
 
     // Image-based lighting — this is what makes the metal read as real metal.
     const pmrem = new THREE.PMREMGenerator(this.renderer);
@@ -342,7 +364,7 @@ class GachaEngine {
   /* ------------------------------------------------------- 3D star field */
 
   _initStars() {
-    const COUNT = 1400;
+    const COUNT = 520;
     const pos = new Float32Array(COUNT * 3);
     const size = new Float32Array(COUNT);
     const seed = new Float32Array(COUNT);
@@ -429,9 +451,10 @@ class GachaEngine {
       grp.add(n);
     }
 
-    // emissive energy disc — the glow the ship sits in
+    // Emissive launch-deck glow. Warm gold, not the level colour — in the
+    // reference the pad burns amber under every ship.
     this.padMat = new THREE.MeshBasicMaterial({
-      color: 0x00d5ff,
+      color: PAD_GOLD,
       transparent: true,
       opacity: 0.75,
       blending: THREE.AdditiveBlending,
@@ -516,15 +539,29 @@ class GachaEngine {
       clearcoatRoughness: 0.15,
       envMapIntensity: 1.4
     });
+    // Pale cap for nose cones — the reference's noses read clearly lighter
+    // than the hull, which is most of what makes it look like a toy rocket.
+    const nose = new THREE.MeshPhysicalMaterial({
+      color: spec.nose,
+      metalness: 0.35,
+      roughness: 0.28,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.1,
+      envMapIntensity: 1.1
+    });
+    // A full metal (metalness 1) takes ALL its colour from the environment, and
+    // RoomEnvironment is a grey room — that read as muddy tan, not gold. Backing
+    // metalness off lets the diffuse gold through while keeping the sheen.
     const gold = new THREE.MeshPhysicalMaterial({
       color: GOLD,
-      metalness: 1.0,
-      roughness: 0.16,
-      clearcoat: 0.6,
-      envMapIntensity: 2.0
+      metalness: 0.55,
+      roughness: 0.28,
+      clearcoat: 0.8,
+      clearcoatRoughness: 0.15,
+      envMapIntensity: 0.9
     });
     const goldDeep = new THREE.MeshStandardMaterial({
-      color: GOLD_DEEP, metalness: 1.0, roughness: 0.32, envMapIntensity: 1.6
+      color: GOLD_DEEP, metalness: 0.6, roughness: 0.4, envMapIntensity: 0.8
     });
     const trim = new THREE.MeshStandardMaterial({
       color: DARK_TRIM, metalness: 0.7, roughness: 0.45, envMapIntensity: 1.0
@@ -535,32 +572,34 @@ class GachaEngine {
       transmission: 0.6, thickness: 0.4, envMapIntensity: 2.2
     });
 
-    const all = [hull, hullLight, gold, goldDeep, trim, glow, glass];
+    const all = [hull, hullLight, nose, gold, goldDeep, trim, glow, glass];
     this.disposables.push(...all);
-    return { hull, hullLight, gold, goldDeep, trim, glow, glass };
+    return { hull, hullLight, nose, gold, goldDeep, trim, glow, glass };
   }
 
-  /** Lathe profile: ogive nose -> cylindrical barrel -> flared skirt. */
+  /**
+   * Barrel only — flared skirt, straight body, rounded shoulder. The nose is a
+   * separate mesh so it can carry its own pale material.
+   * Spans y = -body/2 .. +body/2, ending at NOSE_NECK * R.
+   */
   _fuselageGeo(spec) {
     const pts = [];
-    const H = spec.height;
+    const H = spec.body;
     const R = spec.radius;
-    const STEPS = 40;
+    const STEPS = 36;
 
     for (let i = 0; i <= STEPS; i++) {
       const t = i / STEPS;
       const y = -H * 0.5 + t * H;
       let r;
-      if (t > 0.74) {
-        // Nose: a short, full ogive that ends in a blunt cap — a long thin
-        // spike reads as a dart, not the stubby bullet nose of the reference.
-        const nt = (t - 0.74) / 0.26;
-        r = R * Math.pow(1 - nt * nt, 0.42 / spec.noseSharp);
-        r = Math.max(r, R * 0.1);
-      } else if (t < 0.1) {
+      if (t > 0.86) {
+        // shoulder: ease from full radius down to the nose neck
+        const st = (t - 0.86) / 0.14;
+        r = R * (1 - (1 - NOSE_NECK) * st * st);
+      } else if (t < 0.09) {
         // skirt flare at the base
-        const st = t / 0.1;
-        r = R * (1.16 - 0.16 * st);
+        const st = t / 0.09;
+        r = R * (1.14 - 0.14 * st);
       } else {
         r = R;
       }
@@ -569,19 +608,40 @@ class GachaEngine {
     return new THREE.LatheGeometry(pts, 64);
   }
 
-  /** Swept delta fin as an extruded profile — real volume, not a plane. */
-  _finGeo(spec) {
+  /** Nose cone: tapered profile with a softly rounded tip, not a needle. */
+  _noseGeo(spec) {
+    const pts = [];
+    const L = spec.noseLen;
+    const R = spec.radius * NOSE_NECK;
+    const STEPS = 26;
+    for (let i = 0; i <= STEPS; i++) {
+      const t = i / STEPS;
+      // rounded ogive: full at the neck, gently blunted at the tip
+      const r = R * Math.pow(Math.cos(t * Math.PI * 0.5), 0.62);
+      pts.push(new THREE.Vector2(Math.max(r, 0.008), t * L));
+    }
+    return new THREE.LatheGeometry(pts, 64);
+  }
+
+  /**
+   * Big swept wing panel. These are the widest thing on the reference ship and
+   * carry most of its silhouette, so they are deliberately oversized.
+   */
+  _wingGeo(spec) {
     const s = new THREE.Shape();
-    const span = spec.finSpan;
-    const sweep = spec.finSweep;
-    s.moveTo(0, 0.1);
-    s.lineTo(span, -0.55 - sweep);
-    s.lineTo(span * 0.92, -0.95 - sweep);
-    s.lineTo(0, -0.62);
+    const span = spec.wingSpan;
+    const drop = spec.wingDrop;
+    // Narrow at the tip and strongly raked, so it reads as a swept fin rather
+    // than the flat slab a straight quad gives you.
+    s.moveTo(0, 0.62);
+    s.lineTo(span * 0.5, -drop * 0.14);
+    s.lineTo(span, -drop * 0.78);
+    s.lineTo(span * 0.82, -drop);
+    s.lineTo(0, -drop * 0.66);
     s.closePath();
     return new THREE.ExtrudeGeometry(s, {
-      depth: 0.11, bevelEnabled: true, bevelThickness: 0.03,
-      bevelSize: 0.03, bevelSegments: 2
+      depth: 0.16, bevelEnabled: true, bevelThickness: 0.04,
+      bevelSize: 0.04, bevelSegments: 2
     });
   }
 
@@ -589,30 +649,34 @@ class GachaEngine {
     const spec = SHIPS[level];
     const M = this._mats(spec);
     const g = new THREE.Group();
-    const H = spec.height;
+    const H = spec.body;          // barrel height
     const R = spec.radius;
+    const TOP = H * 0.5;          // where the barrel ends / nose begins
 
-    /* ---- fuselage */
+    /* ---- barrel */
     const body = new THREE.Mesh(this._fuselageGeo(spec), M.hull);
     body.castShadow = true;
     g.add(body);
 
-    /* ---- white belly stripe (a slightly larger lathe slice, front only) */
-    const stripeGeo = this._fuselageGeo(spec);
-    stripeGeo.scale(1.008, 1, 1.008);
-    const stripe = new THREE.Mesh(stripeGeo, M.hullLight);
-    stripe.geometry.clearGroups();
-    stripe.geometry.addGroup(0, Infinity, 0);
-    stripe.scale.set(0.35, 1, 1);       // narrow band down the centreline
-    stripe.position.z = 0.001;
-    g.add(stripe);
+    /* ---- pale nose cone, seated on the shoulder */
+    const nose = new THREE.Mesh(this._noseGeo(spec), M.nose);
+    nose.position.y = TOP;
+    nose.castShadow = true;
+    g.add(nose);
+
+    // collar hiding the barrel/nose seam
+    const collar = new THREE.Mesh(
+      new THREE.CylinderGeometry(R * NOSE_NECK * 1.15, R * NOSE_NECK * 1.22, 0.13, 48),
+      M.gold
+    );
+    collar.position.y = TOP - 0.02;
+    g.add(collar);
 
     /* ---- gold band rings around the barrel */
     for (let i = 0; i < spec.bands; i++) {
-      const t = 0.16 + i * (0.34 / Math.max(spec.bands - 1, 1));
-      const y = -H * 0.5 + t * H;
+      const y = -H * 0.30 + i * (H * 0.34);
       const band = new THREE.Mesh(
-        new THREE.CylinderGeometry(R * 1.035, R * 1.035, 0.085, 64, 1, true),
+        new THREE.CylinderGeometry(R * 1.04, R * 1.04, 0.1, 64, 1, true),
         M.gold
       );
       band.position.y = y;
@@ -620,150 +684,185 @@ class GachaEngine {
       g.add(band);
     }
 
-    /* ---- gold chevrons on the nose (the "»" arrows from the reference) */
+    /* ---- bold gold chevrons on the upper barrel.
+       These are the ship's signature marking in the reference, so they are cut
+       thick and sized off the hull radius rather than a fixed scale. */
+    const cw = R * 0.62;          // half-width
+    const ch = R * 0.42;          // rise
+    const ct = R * 0.20;          // stroke thickness
     const chevShape = new THREE.Shape();
-    chevShape.moveTo(-0.28, 0);
-    chevShape.lineTo(0, 0.22);
-    chevShape.lineTo(0.28, 0);
-    chevShape.lineTo(0.28, -0.1);
-    chevShape.lineTo(0, 0.12);
-    chevShape.lineTo(-0.28, -0.1);
+    chevShape.moveTo(-cw, 0);
+    chevShape.lineTo(0, ch);
+    chevShape.lineTo(cw, 0);
+    chevShape.lineTo(cw, -ct);
+    chevShape.lineTo(0, ch - ct);
+    chevShape.lineTo(-cw, -ct);
     chevShape.closePath();
     const chevGeo = new THREE.ExtrudeGeometry(chevShape, {
-      depth: 0.05, bevelEnabled: true, bevelThickness: 0.015,
-      bevelSize: 0.015, bevelSegments: 1
+      depth: 0.07, bevelEnabled: true, bevelThickness: 0.02,
+      bevelSize: 0.02, bevelSegments: 1
     });
     this.disposables.push(chevGeo);
 
-    // Kept on the straight barrel, not the tapering nose — up there the hull
-    // pulls away from the decal and they float off the surface.
     for (let i = 0; i < spec.chevrons; i++) {
-      const y = H * 0.02 + i * 0.34;
-      const scale = 1 - i * 0.06;
+      const y = TOP - 0.42 - i * (ch + ct + R * 0.14);
       for (const side of [1, -1]) {
         const c = new THREE.Mesh(chevGeo, M.gold);
-        c.scale.setScalar(scale * R * 1.9);
-        c.position.set(0, y, side * (R * 0.94));
+        c.position.set(0, y, side * (R * 0.95));
         if (side < 0) c.rotation.y = Math.PI;
         c.castShadow = true;
         g.add(c);
       }
     }
 
-    /* ---- central grille panel (ladder detail low on the fuselage) */
-    const grille = new THREE.Group();
-    for (let i = 0; i < 7; i++) {
-      const rung = new THREE.Mesh(
-        new THREE.BoxGeometry(R * 0.62, 0.045, 0.05), M.goldDeep
+    /* ---- central grille panel low on the barrel */
+    for (const side of [1, -1]) {
+      const plate = new THREE.Mesh(
+        new THREE.BoxGeometry(R * 0.64, H * 0.30, 0.05), M.trim
       );
-      rung.position.set(0, -H * 0.24 + i * 0.088, R * 0.985);
-      grille.add(rung);
+      plate.position.set(0, -H * 0.16, side * (R * 0.965));
+      g.add(plate);
+
+      for (let i = 0; i < 6; i++) {
+        const rung = new THREE.Mesh(
+          new THREE.BoxGeometry(R * 0.5, 0.05, 0.05), M.gold
+        );
+        rung.position.set(0, -H * 0.27 + i * (H * 0.045), side * (R * 0.995));
+        g.add(rung);
+      }
     }
-    const grillePlate = new THREE.Mesh(
-      new THREE.BoxGeometry(R * 0.78, 0.72, 0.04), M.trim
-    );
-    grillePlate.position.set(0, -H * 0.24 + 0.26, R * 0.96);
-    grille.add(grillePlate);
-    g.add(grille);
 
-    /* ---- cockpit glass */
-    const cockpit = new THREE.Mesh(
-      new THREE.SphereGeometry(R * 0.3, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.5),
-      M.glass
-    );
-    cockpit.position.set(0, H * 0.30, R * 0.62);
-    cockpit.rotation.x = Math.PI * 0.42;
-    g.add(cockpit);
-
-    /* ---- fins */
-    const finGeo = this._finGeo(spec);
-    this.disposables.push(finGeo);
-    for (let i = 0; i < spec.finCount; i++) {
-      const a = (i / spec.finCount) * Math.PI * 2;
+    /* ---- big swept wings (widest feature, drives the silhouette) */
+    const wingGeo = this._wingGeo(spec);
+    this.disposables.push(wingGeo);
+    for (let i = 0; i < spec.wings; i++) {
+      // offset so a pair points straight left/right at the camera
+      const a = (i / spec.wings) * Math.PI * 2 + Math.PI / 2;
       const pivot = new THREE.Group();
       pivot.rotation.y = a;
 
-      const fin = new THREE.Mesh(finGeo, M.gold);
-      fin.position.set(R * 0.88, -H * 0.30, -0.055);
-      fin.castShadow = true;
-      pivot.add(fin);
+      const wing = new THREE.Mesh(wingGeo, M.gold);
+      wing.position.set(R * 0.80, -H * 0.26, -0.065);
+      wing.castShadow = true;
+      pivot.add(wing);
 
-      // inset accent panel on each fin
-      const inset = new THREE.Mesh(finGeo, M.hull);
-      inset.position.set(R * 0.88, -H * 0.30, -0.055);
-      inset.scale.set(0.62, 0.62, 1.12);
-      inset.position.y += 0.1;
+      // blue inset panel near the root
+      const inset = new THREE.Mesh(wingGeo, M.hull);
+      inset.position.set(R * 0.80, -H * 0.26 + 0.14, -0.065);
+      inset.scale.set(0.56, 0.6, 1.18);
       pivot.add(inset);
 
       g.add(pivot);
     }
 
-    /* ---- side boosters */
+    /* ---- side boosters: pale nose cap, blue tube, gold skirt */
     if (spec.boosters) {
       const bs = spec.boosterScale;
       for (let i = 0; i < spec.boosters; i++) {
         const side = i === 0 ? -1 : 1;
         const bg = new THREE.Group();
-        // Pushed clear of the fuselage and seated low, so each booster reads as
-        // its own body instead of a gold spike poking out from behind the hull.
-        bg.position.set(side * (R + bs * 0.78), -H * 0.26, 0);
+        bg.position.set(side * (R + bs * 0.72), -H * 0.18, 0);
 
         const tube = new THREE.Mesh(
-          new THREE.CapsuleGeometry(bs * 0.42, H * 0.34, 8, 32), M.hull
+          new THREE.CapsuleGeometry(bs * 0.42, H * 0.42, 8, 32), M.hull
         );
         tube.castShadow = true;
         bg.add(tube);
 
-        // nose cone sits on top of the booster body
         const cap = new THREE.Mesh(
-          new THREE.ConeGeometry(bs * 0.43, bs * 0.85, 32), M.gold
+          new THREE.ConeGeometry(bs * 0.43, bs * 1.2, 32), M.nose
         );
-        cap.position.y = H * 0.17 + bs * 0.42;
+        cap.position.y = H * 0.21 + bs * 0.6;
         cap.castShadow = true;
         bg.add(cap);
 
-        // flared skirt at the booster's own nozzle
+        const ring = new THREE.Mesh(
+          new THREE.CylinderGeometry(bs * 0.46, bs * 0.46, 0.09, 32, 1, true), M.gold
+        );
+        ring.position.y = H * 0.05;
+        bg.add(ring);
+
         const skirt = new THREE.Mesh(
-          new THREE.CylinderGeometry(bs * 0.5, bs * 0.4, 0.28, 32, 1, true), M.goldDeep
+          new THREE.CylinderGeometry(bs * 0.52, bs * 0.4, 0.3, 32, 1, true), M.goldDeep
         );
         skirt.material.side = THREE.DoubleSide;
-        skirt.position.y = -H * 0.17 - 0.1;
+        skirt.position.y = -H * 0.21 - 0.12;
         bg.add(skirt);
 
         g.add(bg);
       }
     }
 
+    /* ---- gold engine housing spanning the whole cluster */
+    const spanX = Math.max(...spec.engines.map(e => Math.abs(e.x)));
+    const housing = new THREE.Mesh(
+      new THREE.CylinderGeometry(
+        Math.max(R * 1.02, spanX + 0.34),
+        Math.max(R * 0.92, spanX + 0.28),
+        0.3, 48
+      ),
+      M.gold
+    );
+    housing.position.y = -H * 0.5 - 0.1;
+    housing.castShadow = true;
+    g.add(housing);
+
     /* ---- engine nozzles + glowing throats */
     this.nozzles = [];
-    const engineY = -H * 0.5 - 0.06;
+    const engineY = -H * 0.5 - 0.3;
     for (const e of spec.engines) {
       const bell = new THREE.Mesh(
-        new THREE.CylinderGeometry(e.r * 1.25, e.r * 0.8, 0.42, 32, 1, true),
+        new THREE.CylinderGeometry(e.r * 1.3, e.r * 0.82, 0.44, 32, 1, true),
         M.goldDeep
       );
       bell.material.side = THREE.DoubleSide;
-      bell.position.set(e.x, engineY - 0.12, e.z);
+      bell.position.set(e.x, engineY - 0.16, e.z);
       bell.castShadow = true;
       g.add(bell);
 
       // Deliberately NOT flameCore — a pure-white basic material here sits far
-      // above the bloom threshold and smears the whole engine bay into a blob.
+      // above the bloom threshold and smears the engine bay into a blob.
       const throat = new THREE.Mesh(
-        new THREE.CircleGeometry(e.r * 1.1, 24),
+        new THREE.CircleGeometry(e.r * 1.15, 24),
         new THREE.MeshBasicMaterial({
           color: new THREE.Color(spec.flameEdge).multiplyScalar(0.7)
         })
       );
       throat.rotation.x = Math.PI / 2;
-      throat.position.set(e.x, engineY - 0.30, e.z);
+      throat.position.set(e.x, engineY - 0.36, e.z);
       g.add(throat);
 
-      this.nozzles.push({ x: e.x, z: e.z, r: e.r, y: engineY - 0.3 });
+      this.nozzles.push({ x: e.x, z: e.z, r: e.r, y: engineY - 0.36 });
     }
 
     return g;
   }
+
+  /**
+   * Fit the camera to whatever was just built. Ship proportions differ per
+   * tier, so hardcoded distances drift; measuring the bounds keeps every ship
+   * seated in the same stage band.
+   */
+  _frameCamera() {
+    // Measure the hull only. Flames and the spark cloud have loose, animated
+    // bounds, so including them makes the framing jitter between rebuilds.
+    const box = new THREE.Box3().setFromObject(this.rocket);
+    box.expandByPoint(new THREE.Vector3(0, this.pedestal.position.y - 0.6, 0));
+
+    const height = Math.max(box.max.y - box.min.y, 0.001);
+    const centre = (box.max.y + box.min.y) / 2;
+
+    const viewH = height / FRAME_FILL;
+    const halfFov = THREE.MathUtils.degToRad(this.camera.fov) / 2;
+
+    this.camZ = viewH / (2 * Math.tan(halfFov));
+    // put the box centre at FRAME_CENTRE down the screen instead of dead middle
+    this.camY = centre - (0.5 - FRAME_CENTRE) * viewH;
+
+    this.camera.position.set(0, this.camY, this.camZ);
+    this.camera.lookAt(0, this.camY, 0);
+  }
+
 
   /* ------------------------------------------------------------- flames */
 
@@ -894,20 +993,21 @@ class GachaEngine {
     this.shipRoot.position.set(0, 0, 0);
     this.scene.add(this.shipRoot);
 
+    // Re-fit the camera: each tier has its own proportions.
+    this._frameCamera();
+
     // recolour the level-driven lighting + pedestal
     const c = new THREE.Color(spec.accent);
     this.rim.color.copy(c);
     this.engineLight.color.copy(new THREE.Color(spec.flameEdge));
-    this.padMat.color.copy(c);
     this.ringA.material.color.copy(c);
     this.ringB.material.color.copy(c);
     this.shockMat.color.copy(c);
     this.starUniforms.uColor.value.copy(c);
 
     if (!instant) {
-      // snappy materialise-in
+      // snappy materialise-in (scale only — the ship never rotates)
       this.shipRoot.scale.setScalar(0.78);
-      this.shipRoot.rotation.y = -0.7;
       this._spawnT = 0;
     } else {
       this.shipRoot.scale.setScalar(1);
@@ -916,8 +1016,6 @@ class GachaEngine {
   }
 
   setThrottle(v) { this.targetThrottle = v; }
-
-  setTilt(x, y) { this.tilt.x = x; this.tilt.y = y; }
 
   /**
    * Full launch choreography. Resolves when the ship has cleared frame,
@@ -964,12 +1062,11 @@ class GachaEngine {
     this.throttle += (this.targetThrottle - this.throttle) * Math.min(dt * 5.5, 1);
     this.warp += (this.targetWarp - this.warp) * Math.min(dt * 2.6, 1);
 
-    // ---- ship idle motion
+    // ---- ship idle motion: a slow hover only. No spin, no lean — the
+    // reference client presents the ship dead-on and perfectly still.
     if (this.shipRoot && !this.isLaunching) {
-      this.shipRoot.position.y = Math.sin(t * 1.15) * 0.11;
-      this.shipRoot.rotation.y += dt * 0.24;
-      this.shipRoot.rotation.z = Math.sin(t * 0.8) * 0.022 + this.tilt.x * 0.14;
-      this.shipRoot.rotation.x = this.tilt.y * 0.1;
+      this.shipRoot.position.y = Math.sin(t * 1.15) * 0.09;
+      this.shipRoot.rotation.set(0, 0, 0);
     }
 
     // ---- level-switch materialise
@@ -1013,16 +1110,12 @@ class GachaEngine {
       this.shake = Math.max(0, this.shake - dt * 0.55);
       const s = this.shake * this.shake * 0.35;
       this.camera.position.x = (Math.random() - 0.5) * s;
-      this.camera.position.y = CAM_Y + (Math.random() - 0.5) * s;
+      this.camera.position.y = this.camY + (Math.random() - 0.5) * s;
     } else {
       this.camera.position.x += (0 - this.camera.position.x) * dt * 4;
-      this.camera.position.y += (CAM_Y - this.camera.position.y) * dt * 4;
+      this.camera.position.y += (this.camY - this.camera.position.y) * dt * 4;
     }
-    // subtle parallax orbit from pointer/gyro
-    const aimY = this.camera.position.y;
-    this.camera.position.x += this.tilt.x * 1.6;
-    this.camera.position.y += this.tilt.y * -1.0;
-    this.camera.lookAt(0, aimY, 0);
+    this.camera.lookAt(0, this.camera.position.y, 0);
 
     // ---- flames
     if (this.flameUniforms) {

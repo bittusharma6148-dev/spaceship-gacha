@@ -790,31 +790,8 @@
     );
   }
 
-  /* ---- Pointer / touch parallax -> real 3D camera orbit + ship lean ---- */
-  function pushTilt(clientX, clientY) {
-    const e = engine();
-    if (!e || state.isSpinning) return;
-    const rect = el.phoneScreenViewport.getBoundingClientRect();
-    const x = (clientX - rect.left) / rect.width - 0.5;
-    const y = (clientY - rect.top) / rect.height - 0.5;
-    e.setTilt(x, y);
-    el.phoneScreenViewport.style.backgroundPosition =
-      `${50 + x * -12}% ${50 + y * -12}%`;
-  }
-
-  function clearTilt() {
-    const e = engine();
-    if (e) e.setTilt(0, 0);
-    el.phoneScreenViewport.style.backgroundPosition = '50% 50%';
-  }
-
-  el.phoneScreenViewport.addEventListener("mousemove", (ev) => pushTilt(ev.clientX, ev.clientY));
-  el.phoneScreenViewport.addEventListener("mouseleave", clearTilt);
-  el.phoneScreenViewport.addEventListener("touchmove", (ev) => {
-    const t = ev.touches[0];
-    if (t) pushTilt(t.clientX, t.clientY);
-  }, { passive: true });
-  el.phoneScreenViewport.addEventListener("touchend", clearTilt);
+  /* No pointer-parallax. The camera is locked: the stage must read the same
+     for every player on every device, exactly like the reference client. */
 
 
   el.levelBadges.forEach(badge => {
