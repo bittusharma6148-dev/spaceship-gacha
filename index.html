@@ -9,12 +9,19 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@500;600;700;800&family=Russo+One&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <!-- GSAP CDN -->
+  <!-- GSAP (UI tweens only — the ship itself is driven by the 3D engine) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-  <!-- Three.js 3D WebGL Engine -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <!-- Google Model-Viewer for 3D GLB Rendering -->
-  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+
+  <!-- Real 3D engine: Three.js r180 ES modules -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.180.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="engine3d.js"></script>
 </head>
 <body>
 
@@ -60,49 +67,21 @@
         <button class="btn btn-ghost" id="btn-toggle-audio">Toggle Audio Synth: ON</button>
       </div>
 
-      <div class="instructions" id="tuner-panel">
-        <h4>3D Engine Live Tuner</h4>
-        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
-          <div>
-            <label style="font-size: 10px; color: var(--gold-primary); display: flex; justify-content: space-between;">
-              <span>PITCH (X):</span> <span id="val-pitch">90°</span>
-            </label>
-            <input type="range" id="tune-pitch" min="0" max="360" value="90" style="width: 100%; accent-color: var(--gold-primary);">
-          </div>
-          <div>
-            <label style="font-size: 10px; color: var(--gold-primary); display: flex; justify-content: space-between;">
-              <span>ROLL (Y):</span> <span id="val-roll">0°</span>
-            </label>
-            <input type="range" id="tune-roll" min="0" max="360" value="0" style="width: 100%; accent-color: var(--gold-primary);">
-          </div>
-          <div>
-            <label style="font-size: 10px; color: var(--gold-primary); display: flex; justify-content: space-between;">
-              <span>YAW (Z):</span> <span id="val-yaw">0°</span>
-            </label>
-            <input type="range" id="tune-yaw" min="0" max="360" value="0" style="width: 100%; accent-color: var(--gold-primary);">
-          </div>
-          <div>
-            <label style="font-size: 10px; color: var(--gold-primary); display: flex; justify-content: space-between;">
-              <span>FLAME OFFSET:</span> <span id="val-flame">90px</span>
-            </label>
-            <input type="range" id="tune-flame" min="0" max="150" value="90" style="width: 100%; accent-color: var(--gold-primary);">
-          </div>
-          <div>
-            <label style="font-size: 10px; color: var(--gold-primary); display: flex; justify-content: space-between;">
-              <span>METALNESS:</span> <span id="val-metal">0.90</span>
-            </label>
-            <input type="range" id="tune-metal" min="0" max="1" step="0.05" value="0.9" style="width: 100%; accent-color: var(--gold-primary);">
-          </div>
-          <div>
-            <label style="font-size: 10px; color: var(--gold-primary); display: flex; justify-content: space-between;">
-              <span>ROUGHNESS:</span> <span id="val-rough">0.25</span>
-            </label>
-            <input type="range" id="tune-rough" min="0" max="1" step="0.05" value="0.25" style="width: 100%; accent-color: var(--gold-primary);">
-          </div>
-          <div style="margin-top: 4px; padding: 6px; background: rgba(0,0,0,0.5); border: 1px solid rgba(229,169,59,0.2);">
-            <div style="font-size: 8px; color: #8c91ab; font-family: var(--f-mono); word-break: break-all; white-space: pre-wrap;" id="tune-config-output">Config will appear here</div>
-          </div>
-        </div>
+      <div class="instructions" id="engine-panel">
+        <h4>Render Engine</h4>
+        <ul class="engine-stats">
+          <li><span>Renderer</span><b id="eng-renderer">booting…</b></li>
+          <li><span>Ship</span><b id="eng-ship">—</b></li>
+          <li><span>Shading</span><b>PBR + IBL</b></li>
+          <li><span>Post</span><b>UnrealBloom</b></li>
+          <li><span>Tonemap</span><b>ACES Filmic</b></li>
+          <li><span>Throttle</span><b id="eng-throttle">28%</b></li>
+          <li><span>FPS</span><b id="eng-fps">—</b></li>
+        </ul>
+        <p class="engine-note">
+          Hull, fins, nozzles and pedestal are real geometry built at runtime.
+          Flames are a raymarched fbm shader — no sprites anywhere.
+        </p>
       </div>
     </div>
 
@@ -116,9 +95,9 @@
       <div class="phone-screen" id="phone-screen-viewport">
         <!-- Rotating space background image -->
         <div class="bg-space-image"></div>
-        
-        <!-- Starfield Canvas overlay -->
-        <canvas id="starfield-canvas"></canvas>
+
+        <!-- REAL 3D STAGE: rocket, pedestal, flames, starfield all render here -->
+        <div id="stage-3d"></div>
 
         <!-- Sci-Fi HUD Corner Brackets & Diagnostics -->
         <div class="hud-bracket top-left"></div>
@@ -210,8 +189,7 @@
 
           <!-- Spaceship Display & Pedestal -->
           <div class="spaceship-stage">
-            <div class="blast-beam"></div>
-            
+
             <!-- LEVEL SELECTOR (Vertical Badges stacked LV4 down to LV1) -->
             <div class="level-selector">
               <button class="lv-badge active" data-lv="4">
@@ -240,29 +218,10 @@
               </button>
             </div>
 
-            <div class="pedestal-container" id="pedestal-element">
-              <img src="assets/pedestal.png?v=3" class="pedestal-img" alt="Pedestal">
-              <div class="pedestal-tech-ring">
-                <svg viewBox="0 0 100 30" style="width: 100%; height: 100%; display: block; overflow: visible;">
-                  <ellipse cx="50" cy="15" rx="46" ry="11" stroke="var(--level-color)" stroke-width="1.5" stroke-dasharray="12 8" fill="none" style="filter: drop-shadow(0 0 5px var(--level-glow)); transition: stroke 0.3s ease, filter 0.3s ease;"/>
-                  <ellipse cx="50" cy="15" rx="38" ry="9" stroke="var(--level-color)" stroke-width="0.8" stroke-opacity="0.65" fill="none" style="transition: stroke 0.3s ease;"/>
-                  <path d="M 6 15 L 12 15 M 88 15 L 94 15 M 50 1.5 L 50 4.5" stroke="var(--level-color)" stroke-width="1.5" style="transition: stroke 0.3s ease;"/>
-                </svg>
-              </div>
-              <div class="pedestal-glow"></div>
-              <div class="shockwave-ring" id="shockwave"></div>
-              <div class="hologram-cone" id="hologram"></div>
-            </div>
-            
-            <div class="spaceship-wrapper" id="spaceship-container">
-              <!-- Animated thruster flames behind ship -->
-              <div class="thruster-flame-container" id="flame-effect">
-                <div class="core-flame"></div>
-                <div class="sparks-container"></div>
-              </div>
-              <img src="assets/ship_lv2.png?v=6" class="spaceship-img float-anim" id="spaceship-view-img" alt="Spaceship" style="position: absolute; width: 100%; height: 100%; object-fit: contain; z-index: 4; pointer-events: none; transition: transform 0.15s ease-out, opacity 0.4s ease;">
-            </div>
-            <div class="flash-overlay" id="launch-flash" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, #ffffff 10%, #00e5ff 60%, transparent 100%); z-index: 9; opacity: 0; pointer-events: none; mix-blend-mode: screen; filter: blur(5px);"></div>
+            <!-- Ship, pedestal, thrusters and shockwave are REAL 3D geometry.
+                 They live in #stage-3d (WebGL) — no sprites, no CSS fakes. -->
+
+            <div class="flash-overlay" id="launch-flash" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, #ffffff 10%, var(--level-color) 60%, transparent 100%); z-index: 9; opacity: 0; pointer-events: none; mix-blend-mode: screen; filter: blur(5px);"></div>
 
             <!-- Flying label overlay -->
             <div class="owner-pill" id="owner-name-tag">

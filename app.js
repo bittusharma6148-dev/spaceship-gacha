@@ -19,95 +19,57 @@
     isSpinning: false
   };
 
-  // Level Configuration (4 Tiers matching client's screenshot)
+  // Level Configuration — gameplay + UI only.
+  // Ship geometry, materials, nozzles and flame colours live in engine3d.js (SHIPS).
   const levelConfig = {
     1: {
       color: "#00e676", // Green
       glow: "rgba(0, 230, 118, 0.45)",
-      shipImg: "assets/ship_lv1.png",
+      shipImg: "assets/ship_lv1.png",  // 2D thumbnail for reward cards only
+      shipName: "SCOUT",
       cost: 10000,
       chance: 15,
       silverVal: "1000000",
       skinVal: "6000000",
-      frameVal: "X 4",
-      flameOffset: 90,
-      orientation: "90deg 0deg 270deg",
-      cameraOrbit: "0deg 90deg auto",
-      cameraTarget: "0m 0m 0m",
-      metalness: 0.8,
-      roughness: 0.25
+      frameVal: "X 4"
     },
     2: {
       color: "#d500f9", // Purple
       glow: "rgba(213, 0, 249, 0.45)",
       shipImg: "assets/ship_lv4.png",
+      shipName: "INTERCEPTOR",
       cost: 10000,
       chance: 25,
       silverVal: "1000000",
       skinVal: "6000000",
-      frameVal: "X 4",
-      flameOffset: 95,
-      orientation: "270deg 0deg 90deg",
-      cameraOrbit: "0deg 90deg auto",
-      cameraTarget: "0m 0m 0m",
-      metalness: 0.95,
-      roughness: 0.18
+      frameVal: "X 4"
     },
     3: {
       color: "#ff1744", // Red
       glow: "rgba(255, 23, 68, 0.45)",
       shipImg: "assets/ship_lv3.png",
+      shipName: "HEAVY LIFTER",
       cost: 10000,
       chance: 35,
       silverVal: "1000000",
       skinVal: "6000000",
-      frameVal: "X 4",
-      flameOffset: 95,
-      orientation: "270deg 0deg 270deg",
-      cameraOrbit: "0deg 90deg auto",
-      cameraTarget: "0m 0m 0m",
-      metalness: 0.9,
-      roughness: 0.22
+      frameVal: "X 4"
     },
     4: {
-      color: "#00e5ff", // Blue/Gold
-      glow: "rgba(0, 229, 255, 0.45)",
+      color: "#00d5ff", // Blue/Gold
+      glow: "rgba(0, 213, 255, 0.45)",
       shipImg: "assets/ship_lv2.png",
+      shipName: "FLAGSHIP",
       cost: 10000,
       chance: 45,
       silverVal: "1000000",
       skinVal: "6000000",
-      frameVal: "X 4",
-      flameOffset: 110,
-      orientation: "270deg 0deg 90deg",
-      cameraOrbit: "0deg 90deg auto",
-      cameraTarget: "0m -0.05m 0m",
-      metalness: 0.85,
-      roughness: 0.2
+      frameVal: "X 4"
     }
   };
 
-  // Nozzle coordinates for multi-stream flames per level (horizontal percentage offsets & size specs)
-  const nozzlesConfig = {
-    1: [
-      { left: 50, width: 34, height: 110 }
-    ],
-    2: [
-      { left: 14, width: 16, height: 75 },
-      { left: 38, width: 26, height: 100 },
-      { left: 62, width: 26, height: 100 },
-      { left: 86, width: 16, height: 75 }
-    ],
-    3: [
-      { left: 22, width: 16, height: 75 },
-      { left: 50, width: 34, height: 120 },
-      { left: 78, width: 16, height: 75 }
-    ],
-    4: [
-      { left: 34, width: 22, height: 95 },
-      { left: 66, width: 22, height: 95 }
-    ]
-  };
+  // Handle to the WebGL engine (engine3d.js). Null until the module boots.
+  const engine = () => window.GachaEngine || null;
 
   // DOM Elements
   const el = {
@@ -121,13 +83,13 @@
     btnShare: document.getElementById("btn-share"),
     btnQuit: document.getElementById("btn-quit"),
     
-    // Stage elements
-    spaceshipSprite: document.getElementById("spaceship-3d-model"),
-    spaceshipContainer: document.getElementById("spaceship-container"),
-    pedestalGlow: document.querySelector(".pedestal-glow"),
-    flameEffect: document.getElementById("flame-effect"),
-    shockwave: document.getElementById("shockwave"),
-    
+    // Stage (the ship/pedestal/flames are WebGL now — see engine3d.js)
+    launchFlash: document.getElementById("launch-flash"),
+    engRenderer: document.getElementById("eng-renderer"),
+    engShip: document.getElementById("eng-ship"),
+    engThrottle: document.getElementById("eng-throttle"),
+    engFps: document.getElementById("eng-fps"),
+
     // Badges / Selector
     levelBadges: document.querySelectorAll(".lv-badge"),
     
@@ -563,124 +525,6 @@
     localStorage.setItem("gacha_progress", state.progress);
   }
 
-  // Dynamic Nozzles rebuild (Multi-nozzle flames matching selected level)
-  function rebuildFlames() {
-    const flames = el.flameEffect.querySelectorAll(".core-flame");
-    flames.forEach(f => f.remove());
-
-    const config = levelConfig[state.activeLevel];
-    // Position the flames container relative to the ship's active engines
-    el.flameEffect.style.bottom = `${config.flameOffset}px`;
-
-    const nozzles = nozzlesConfig[state.activeLevel];
-    nozzles.forEach(nozzle => {
-      const flame = document.createElement("div");
-      flame.className = "core-flame";
-      flame.style.left = `${nozzle.left}%`;
-      flame.style.width = `${nozzle.width}px`;
-      flame.style.height = `${nozzle.height}px`;
-      flame.style.transform = `translateX(-50%)`;
-
-      // 1. Base glow bulb (adds lens flare glow at nozzle mouth)
-      const baseGlow = document.createElement("div");
-      baseGlow.className = "flame-glow-base";
-      flame.appendChild(baseGlow);
-
-      // 2. Outer burning plume
-      const outerPlume = document.createElement("div");
-      outerPlume.className = "flame-plume-outer";
-      flame.appendChild(outerPlume);
-
-      // 3. Inner white-hot core
-      const innerPlume = document.createElement("div");
-      innerPlume.className = "flame-plume-inner";
-      flame.appendChild(innerPlume);
-
-      // 4. Moving combustion flow streaks
-      const streakContainer = document.createElement("div");
-      streakContainer.className = "flame-streaks";
-      for (let i = 1; i <= 3; i++) {
-        const streak = document.createElement("div");
-        streak.className = "flame-streak";
-        streakContainer.appendChild(streak);
-      }
-      flame.appendChild(streakContainer);
-
-      el.flameEffect.appendChild(flame);
-    });
-    scaleFlames(0.22, 0);
-  }
-
-  // Set flame height scaling dynamically (factors in landing/takeoff sizes)
-  function scaleFlames(factor, duration = 0.25) {
-    const flames = el.flameEffect.querySelectorAll(".core-flame");
-    const nozzles = nozzlesConfig[state.activeLevel];
-    flames.forEach((flame, index) => {
-      const origHeight = nozzles[index].height;
-      gsap.to(flame, {
-        height: origHeight * factor,
-        duration: duration,
-        ease: "power2.out"
-      });
-    });
-  }
-
-  // Config writer helper
-  function applyPBRSettings() {
-    const pitch = document.getElementById("tune-pitch").value;
-    const roll = document.getElementById("tune-roll").value;
-    const yaw = document.getElementById("tune-yaw").value;
-    const flame = document.getElementById("tune-flame").value;
-    const metalness = document.getElementById("tune-metal").value;
-    const roughness = document.getElementById("tune-rough").value;
-
-    const output = `{\n  flameOffset: ${flame},\n  orientation: "${roll}deg ${pitch}deg ${yaw}deg",\n  metalness: ${metalness},\n  roughness: ${roughness}\n}`;
-    document.getElementById("tune-config-output").innerText = output;
-  }
-
-  // Check if a 2D model image exists, and load it dynamically
-  function checkAndLoad3DModel() {
-    const level = state.activeLevel;
-    const shipImg = document.getElementById("spaceship-view-img");
-    if (!shipImg) return;
-
-    const config = levelConfig[level];
-
-    // Update image src using the mapped config value
-    const newSrc = `${config.shipImg}?v=6`;
-    if (shipImg.getAttribute("src") !== newSrc) {
-      shipImg.setAttribute("src", newSrc);
-    }
-
-    // Update tuner sliders to match current config values (format is 'roll pitch yaw')
-    const [roll, pitch, yaw] = config.orientation.replace(/deg/g, '').split(' ').map(Number);
-    document.getElementById("tune-pitch").value = pitch || 0;
-    document.getElementById("tune-roll").value = roll || 0;
-    document.getElementById("tune-yaw").value = yaw || 0;
-    document.getElementById("tune-flame").value = config.flameOffset || 90;
-    document.getElementById("tune-metal").value = config.metalness !== undefined ? config.metalness : 0.9;
-    document.getElementById("tune-rough").value = config.roughness !== undefined ? config.roughness : 0.25;
-
-    // Update slider label texts
-    document.getElementById("val-pitch").innerText = `${pitch || 0}°`;
-    document.getElementById("val-roll").innerText = `${roll || 0}°`;
-    document.getElementById("val-yaw").innerText = `${yaw || 0}°`;
-    document.getElementById("val-flame").innerText = `${config.flameOffset || 90}px`;
-    document.getElementById("val-metal").innerText = (config.metalness !== undefined ? config.metalness : 0.9).toFixed(2);
-    document.getElementById("val-rough").innerText = (config.roughness !== undefined ? config.roughness : 0.25).toFixed(2);
-
-    // Show dynamic flames immediately
-    if (el.flameEffect) el.flameEffect.style.opacity = "1";
-
-    applyPBRSettings();
-
-    // Apply entrance animation
-    gsap.fromTo(shipImg,
-      { scale: 0.8, opacity: 0 },
-      { scale: 1, opacity: 1, duration: 0.3, ease: "back.out(1.5)" }
-    );
-  }
-
   // Level Selector
   function switchLevel(levelNum) {
     if (state.isSpinning) return;
@@ -709,36 +553,20 @@
     // Set Level Variables
     document.documentElement.style.setProperty("--level-color", config.color);
     document.documentElement.style.setProperty("--level-glow", config.glow);
-    document.documentElement.style.setProperty("--flame-color", config.flameColor || config.color);
-    document.documentElement.style.setProperty("--flame-glow", config.flameGlow || config.glow);
-    document.documentElement.style.setProperty(
-      "--level-bg-grad",
-      `radial-gradient(circle at 50% 80%, ${config.glow} 0%, rgba(0, 0, 0, 0) 70%)`
-    );
+    document.documentElement.style.setProperty("--flame-color", config.color);
+    document.documentElement.style.setProperty("--flame-glow", config.glow);
 
-    const shipImg = document.getElementById("spaceship-view-img");
-    
     // Snappy, instant updates for 0ms response latency
     if (el.cardImgShip) el.cardImgShip.src = config.shipImg;
     if (el.cardAvatarFrame) {
       el.cardAvatarFrame.style.borderColor = config.color;
       el.cardAvatarFrame.style.boxShadow = `0 0 8px ${config.glow}`;
     }
-    
-    rebuildFlames();
-    checkAndLoad3DModel(); // Instant source switch
 
-    // Trigger instant crisp scale pop animation
-    gsap.killTweensOf(shipImg);
-    gsap.fromTo(shipImg, 
-      { scale: 0.76, opacity: 0.75 },
-      { 
-        scale: 1.0, 
-        opacity: 1, 
-        duration: 0.22, 
-        ease: "back.out(1.8)" 
-      }
-    );
+    // Rebuild the real 3D ship for this tier
+    const e = engine();
+    if (e) e.setLevel(levelNum);
+    if (el.engShip) el.engShip.innerText = config.shipName;
 
     // Cards data updates
     el.chanceBadge.innerText = `${config.chance}% Possibility`;
@@ -749,246 +577,9 @@
     el.actionBtnLabel.innerText = `LAUNCH (${config.cost.toLocaleString()} Coins)`;
   }
 
-  // 60FPS Parallax Stars and engine particles
-  const canvas = document.getElementById("starfield-canvas");
-  const ctx = canvas.getContext("2d");
-  let stars = [];
-  let sparks = [];
-  let starSpeed = 0.55;
-  let animationFrameId;
+  /* The 2D starfield canvas, CSS flames and sprite ship that used to live here
+     are gone. Stars, exhaust sparks and plumes are now real 3D in engine3d.js. */
 
-  function resizeCanvas() {
-    canvas.width = canvas.parentElement.clientWidth;
-    canvas.height = canvas.parentElement.clientHeight;
-  }
-
-  function initStars() {
-    stars = [];
-    for (let i = 0; i < 80; i++) {
-      stars.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        len: Math.random() * 3 + 1,
-        speed: Math.random() * 0.9 + 0.3,
-        opacity: Math.random() * 0.8 + 0.2,
-        twinkleSpeed: Math.random() * 0.05 + 0.01,
-        color: Math.random() > 0.7 ? '#00e5ff' : (Math.random() > 0.5 ? '#ffe082' : '#ffffff')
-      });
-    }
-  }
-
-  // Spawn thruster sparks on canvas
-  function spawnThrustParticles() {
-    if (state.isSpinning === false && Math.random() > 0.4) return;
-    const config = levelConfig[state.activeLevel];
-    const nozzles = nozzlesConfig[state.activeLevel];
-
-    // Find spaceship container bounds to align coordinates
-    const rect = el.spaceshipContainer.getBoundingClientRect();
-    const viewportRect = el.phoneScreenViewport.getBoundingClientRect();
-    
-    // Spaceship local coordinates mapped to canvas space
-    const shipLeft = rect.left - viewportRect.left;
-    const shipTop = rect.top - viewportRect.top;
-    const shipWidth = rect.width;
-    const shipHeight = rect.height;
-
-    // Core exhaust base position relative to level specific engines
-    const exhaustY = shipTop + shipHeight - config.flameOffset;
-
-    nozzles.forEach(nozzle => {
-      // nozzle.left is percentage width
-      const exhaustX = shipLeft + (shipWidth * (nozzle.left / 100));
-
-      const particleCount = state.isSpinning ? 4 : 1;
-      for (let k = 0; k < particleCount; k++) {
-        sparks.push({
-          x: exhaustX + (Math.random() - 0.5) * (nozzle.width * 0.6),
-          y: exhaustY,
-          vx: (Math.random() - 0.5) * 1.5,
-          vy: Math.random() * (state.isSpinning ? 18 : 6) + 4,
-          size: Math.random() * (state.isSpinning ? 4.5 : 2.5) + 1,
-          life: 0,
-          maxLife: Math.random() * 25 + 15,
-          color: config.color
-        });
-      }
-    });
-  }
-
-  function animateStarsAndSparks() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // 1. Draw Starfield
-    stars.forEach(star => {
-      star.y += star.speed * (starSpeed * 4);
-      if (star.y > canvas.height) {
-        star.y = 0;
-        star.x = Math.random() * canvas.width;
-      }
-      
-      const isWarp = starSpeed > 2;
-      const streakLength = isWarp ? starSpeed * 10 : star.len;
-      
-      if (isWarp) {
-        // Draw purple outer glow streak (esports neon aura)
-        ctx.strokeStyle = `rgba(213, 0, 249, ${0.45 * star.opacity})`;
-        ctx.lineWidth = 3.5;
-        ctx.beginPath();
-        ctx.moveTo(star.x, star.y);
-        ctx.lineTo(star.x, star.y + streakLength);
-        ctx.stroke();
-      }
-      
-      // Draw white core streak
-      ctx.strokeStyle = isWarp ? `rgba(255, 255, 255, ${0.95 * star.opacity})` : `rgba(255, 255, 255, ${star.opacity})`;
-      ctx.lineWidth = isWarp ? 2 : (star.len > 5 ? 1.5 : 1);
-      ctx.beginPath();
-      ctx.moveTo(star.x, star.y);
-      ctx.lineTo(star.x, star.y + streakLength);
-      ctx.stroke();
-    });
-
-    // 2. Spawn and update engine sparks
-    spawnThrustParticles();
-    
-    sparks.forEach((spark, index) => {
-      spark.x += spark.vx;
-      spark.y += spark.vy;
-      spark.life++;
-
-      const lifeRatio = spark.life / spark.maxLife;
-      const alpha = 1 - lifeRatio;
-
-      ctx.strokeStyle = spark.color;
-      ctx.lineWidth = spark.size * (1 - lifeRatio * 0.5);
-      ctx.shadowBlur = spark.size * 2;
-      ctx.shadowColor = spark.color;
-      ctx.beginPath();
-      ctx.moveTo(spark.x, spark.y);
-      // High-speed motion blur tail vector calculation
-      ctx.lineTo(spark.x - spark.vx * 1.5, spark.y - spark.vy * 1.5);
-      ctx.stroke();
-      ctx.shadowBlur = 0; // reset blur
-
-      if (spark.life >= spark.maxLife) {
-        sparks.splice(index, 1);
-      }
-    });
-
-    // 3. Draw Dynamic Original AAA 8-Point Optic Lens Flare Star & Mach Engine Exhaust
-    const config = levelConfig[state.activeLevel];
-    const nozzles = nozzlesConfig[state.activeLevel];
-    if (config && nozzles && el.spaceshipContainer && el.phoneScreenViewport) {
-      const rect = el.spaceshipContainer.getBoundingClientRect();
-      const viewportRect = el.phoneScreenViewport.getBoundingClientRect();
-      
-      if (rect && viewportRect) {
-        const shipLeft = rect.left - viewportRect.left;
-        const shipTop = rect.top - viewportRect.top;
-        const shipWidth = rect.width;
-        const shipHeight = rect.height;
-        const exhaustY = shipTop + shipHeight - config.flameOffset;
-        
-        ctx.save();
-        ctx.globalCompositeOperation = "lighter";
-        
-        nozzles.forEach(nozzle => {
-          const exhaustX = shipLeft + (shipWidth * (nozzle.left / 100));
-          const scale = state.isSpinning ? 1.85 : 1.0;
-          
-          // A. Radial Light Halo
-          const haloGrad = ctx.createRadialGradient(exhaustX, exhaustY, 0, exhaustX, exhaustY, 36 * scale);
-          haloGrad.addColorStop(0, "rgba(255, 255, 255, 0.98)");
-          haloGrad.addColorStop(0.35, config.color || "#00e5ff");
-          haloGrad.addColorStop(0.75, "rgba(0, 229, 255, 0.35)");
-          haloGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
-          
-          ctx.fillStyle = haloGrad;
-          ctx.beginPath();
-          ctx.arc(exhaustX, exhaustY, 36 * scale, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // B. Anamorphic Horizontal Lens Flare Bar (Long Sci-Fi Light Streak)
-          const streakW = (state.isSpinning ? 280 : 160);
-          const streakH = (state.isSpinning ? 6 : 3.5);
-          const streakGrad = ctx.createLinearGradient(exhaustX - streakW/2, exhaustY, exhaustX + streakW/2, exhaustY);
-          streakGrad.addColorStop(0, "rgba(0, 229, 255, 0)");
-          streakGrad.addColorStop(0.2, "rgba(0, 229, 255, 0.65)");
-          streakGrad.addColorStop(0.5, "#ffffff");
-          streakGrad.addColorStop(0.8, "rgba(0, 229, 255, 0.65)");
-          streakGrad.addColorStop(1, "rgba(0, 229, 255, 0)");
-          
-          ctx.fillStyle = streakGrad;
-          ctx.fillRect(exhaustX - streakW/2, exhaustY - streakH/2, streakW, streakH);
-          
-          // C. 8-Point Optic Flare Star Rays
-          const rayLen = 24 * scale;
-          ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-          ctx.lineWidth = 1.6;
-          
-          // Vertical Ray
-          ctx.beginPath();
-          ctx.moveTo(exhaustX, exhaustY - rayLen);
-          ctx.lineTo(exhaustX, exhaustY + rayLen);
-          ctx.stroke();
-          
-          // Diagonal Rays (45 deg)
-          const diag = rayLen * 0.65;
-          ctx.beginPath();
-          ctx.moveTo(exhaustX - diag, exhaustY - diag);
-          ctx.lineTo(exhaustX + diag, exhaustY + diag);
-          ctx.stroke();
-          
-          ctx.beginPath();
-          ctx.moveTo(exhaustX + diag, exhaustY - diag);
-          ctx.lineTo(exhaustX - diag, exhaustY + diag);
-          ctx.stroke();
-          
-          // D. Mach Shock Rings (Pulsating Internal Combustion Diamonds)
-          const ringPulse = Math.sin(Date.now() * 0.01) * 2;
-          for (let m = 1; m <= 3; m++) {
-            const ringY = exhaustY + (m * 18 * scale);
-            const ringRadius = (15 - m * 3 + ringPulse) * scale;
-            if (ringRadius > 0) {
-              ctx.strokeStyle = config.color || "#00e5ff";
-              ctx.lineWidth = 2;
-              ctx.beginPath();
-              ctx.ellipse(exhaustX, ringY, ringRadius, ringRadius * 0.35, 0, 0, Math.PI * 2);
-              ctx.stroke();
-            }
-          }
-          
-          // E. Core White Hot Point
-          ctx.fillStyle = "#ffffff";
-          ctx.beginPath();
-          ctx.arc(exhaustX, exhaustY, 4.5 * scale, 0, Math.PI * 2);
-          ctx.fill();
-        });
-        
-        // F. Moving Metallic Armor Light Glint Traversing Ship Body
-        const time = Date.now() * 0.002;
-        const glintY = shipTop + (shipHeight * 0.35) + Math.sin(time) * 30;
-        const glintX = shipLeft + (shipWidth * 0.5) + Math.cos(time * 0.7) * 35;
-        
-        const glintGrad = ctx.createRadialGradient(glintX, glintY, 0, glintX, glintY, 22);
-        glintGrad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
-        glintGrad.addColorStop(0.4, "rgba(0, 229, 255, 0.45)");
-        glintGrad.addColorStop(1, "rgba(0, 229, 255, 0)");
-        
-        ctx.fillStyle = glintGrad;
-        ctx.beginPath();
-        ctx.arc(glintX, glintY, 22, 0, Math.PI * 2);
-        ctx.fill();
-        
-        ctx.restore();
-      }
-    }
-
-    animationFrameId = requestAnimationFrame(animateStarsAndSparks);
-  }
-
-  // Timer loop
   function updateTimer() {
     if (state.countdownSeconds <= 0) {
       state.countdownSeconds = 24 * 3600;
@@ -1015,187 +606,30 @@
       return;
     }
 
+    const e = engine();
+    if (!e) return;   // engine still booting
+
     state.isSpinning = true;
     playSynthSound("launch");
 
-    // Deduct coins
     state.gold -= config.cost;
     updateWalletUI();
 
-    // 1. Throttle up flames (scale height to 3.2x for massive AAA blastoff!)
-    scaleFlames(3.2, 0.45);
-
-    // 2. Camera screen shake
-    el.phoneScreenViewport.classList.add("screen-shake");
-
-    // 3. Shockwave blast ring
-    gsap.fromTo(el.shockwave,
-      { scale: 0.4, opacity: 0.9 },
-      { scale: 3.2, opacity: 0, duration: 0.8, ease: "power2.out" }
-    );
-
-    // 4. Warp-drive lens flare screen flash overlay (at warp release)
-    const flashEl = document.getElementById("launch-flash");
-    if (flashEl) {
-      gsap.fromTo(flashEl,
+    // Warp-drive lens flare over the WebGL frame, timed to engine release
+    if (el.launchFlash) {
+      gsap.fromTo(el.launchFlash,
         { opacity: 0, scale: 0.6 },
-        { 
-          opacity: 0.95, 
-          scale: 1.8, 
-          duration: 0.12, 
-          delay: 0.35, 
-          ease: "power2.out", 
-          onComplete: () => {
-            gsap.to(flashEl, { opacity: 0, scale: 2.5, duration: 0.9, ease: "power3.out" });
-          }
+        {
+          opacity: 0.9, scale: 1.8, duration: 0.12, delay: 0.5, ease: "power2.out",
+          onComplete: () => gsap.to(el.launchFlash,
+            { opacity: 0, scale: 2.5, duration: 0.9, ease: "power3.out" })
         }
       );
     }
 
-    // 5. Parallax star speed throttle (boost warp speed to 22.0!)
-    gsap.to({ speed: 0.55 }, {
-      speed: 22.0,
-      duration: 1.1,
-      ease: "power2.in",
-      onUpdate: function () {
-        starSpeed = this.targets()[0].speed;
-      }
-    });
-
-    // 6. Space Ship blastoff flight with violent engine vibration & energy beam flare
-    gsap.fromTo(".blast-beam", 
-      { scaleX: 0, opacity: 0 },
-      { scaleX: 1.45, opacity: 0.95, duration: 0.35, yoyo: true, repeat: 1, ease: "power2.out" }
-    );
-
-    const tl = gsap.timeline();
-    const activeLv = state.activeLevel || 5;
-
-    if (activeLv === 1) { // Level 1: Light Speed Zip (Instant warp straight UP, clean, fast)
-      tl.to(el.spaceshipContainer, {
-        x: () => (Math.random() - 0.5) * 3,
-        y: () => 4 + (Math.random() - 0.5) * 3,
-        scaleX: 1.02,
-        scaleY: 0.98,
-        duration: 0.05,
-        repeat: 4,
-        yoyo: true,
-        ease: "none"
-      })
-      .to(el.spaceshipContainer, {
-        y: 10,
-        scaleY: 0.88,
-        scaleX: 1.08,
-        duration: 0.12,
-        ease: "power2.out"
-      })
-      .to(el.spaceshipContainer, {
-        x: 0,
-        y: -1050,
-        scaleY: 2.4, // Intense thin stretch
-        scaleX: 0.4,
-        opacity: 0,
-        duration: 0.38,
-        ease: "power4.in",
-        onComplete: () => {
-          el.phoneScreenViewport.classList.remove("screen-shake");
-          rollGachaPrize();
-        }
-      });
-    } else if (activeLv === 2) { // Level 2: Interceptor Flight (Medium speed straight UP)
-      tl.to(el.spaceshipContainer, {
-        x: () => (Math.random() - 0.5) * 5,
-        y: () => 6 + (Math.random() - 0.5) * 5,
-        scaleX: 1.05,
-        scaleY: 0.95,
-        duration: 0.05,
-        repeat: 6,
-        yoyo: true,
-        ease: "none"
-      })
-      .to(el.spaceshipContainer, {
-        y: 15,
-        scaleY: 0.85,
-        scaleX: 1.12,
-        duration: 0.15,
-        ease: "power2.out"
-      })
-      .to(el.spaceshipContainer, {
-        x: 0,
-        y: -1050, // Straight UP
-        scaleY: 1.85,
-        scaleX: 0.55,
-        opacity: 0,
-        duration: 0.62,
-        ease: "power3.in",
-        onComplete: () => {
-          el.phoneScreenViewport.classList.remove("screen-shake");
-          rollGachaPrize();
-        }
-      });
-    } else if (activeLv === 3) { // Level 3: Heavy Rocket (Slow launch straight UP, heavy shaking)
-      tl.to(el.spaceshipContainer, {
-        x: () => (Math.random() - 0.5) * 16, // Violent engine vibration!
-        y: () => 20 + (Math.random() - 0.5) * 16,
-        scaleX: 1.15,
-        scaleY: 0.85,
-        duration: 0.04,
-        repeat: 18,
-        yoyo: true,
-        ease: "none"
-      })
-      .to(el.spaceshipContainer, {
-        y: 22,
-        scaleY: 0.78,
-        scaleX: 1.2,
-        duration: 0.22,
-        ease: "power2.out"
-      })
-      .to(el.spaceshipContainer, {
-        x: 0,
-        y: -1050, // Straight UP
-        scaleY: 1.5,
-        scaleX: 0.75,
-        opacity: 0,
-        duration: 1.15, // Slow lift-off
-        ease: "power2.in",
-        onComplete: () => {
-          el.phoneScreenViewport.classList.remove("screen-shake");
-          rollGachaPrize();
-        }
-      });
-    } else { // Level 4: Quantum Cruising (Sleek swift launch straight UP)
-      tl.to(el.spaceshipContainer, {
-        x: () => (Math.random() - 0.5) * 6,
-        y: () => 8 + (Math.random() - 0.5) * 6,
-        scaleX: 0.92,
-        scaleY: 1.08,
-        duration: 0.05,
-        repeat: 10,
-        yoyo: true,
-        ease: "power1.inOut"
-      })
-      .to(el.spaceshipContainer, {
-        y: 18,
-        scaleY: 0.82,
-        scaleX: 1.15,
-        duration: 0.18,
-        ease: "power2.out"
-      })
-      .to(el.spaceshipContainer, {
-        x: 0,
-        y: -1050, // Straight UP
-        scaleY: 2.1,
-        scaleX: 0.5,
-        opacity: 0,
-        duration: 0.68,
-        ease: "power3.in",
-        onComplete: () => {
-          el.phoneScreenViewport.classList.remove("screen-shake");
-          rollGachaPrize();
-        }
-      });
-    }
+    // The engine owns the whole flight: hold-down vibration, throttle-up,
+    // shockwave, camera shake and warp. It resolves as the ship clears frame.
+    e.launch().then(rollGachaPrize);
   }
 
   function rollGachaPrize() {
@@ -1290,28 +724,13 @@
     // Clear grid winner highlight
     document.querySelectorAll(".reward-card").forEach(c => c.classList.remove("winner-glow"));
 
-    // Reset star speed
-    starSpeed = 0.55;
-    
-    // Scale flames back to default landing size
-    scaleFlames(0.22, 0.5);
+    // Hand the stage back to idle: engine drops throttle, kills warp,
+    // and re-seats the ship on the pedestal.
+    const e = engine();
+    if (e) e.reset();
 
-    // Spaceship landing bounce down animation
-    gsap.set(el.spaceshipContainer, { y: -800, opacity: 0, scaleY: 1, scaleX: 1 });
-    
-    gsap.to(el.spaceshipContainer, {
-      y: 0,
-      opacity: 1,
-      duration: 0.95,
-      ease: "bounce.out",
-      onComplete: () => {
-        state.isSpinning = false;
-        updateWalletUI();
-        // Restore tech ring animation speed
-        const techRing = document.querySelector('.pedestal-tech-ring');
-        if (techRing) techRing.style.animationDuration = '15s';
-      }
-    });
+    state.isSpinning = false;
+    updateWalletUI();
   }
 
   // Modals Manager
@@ -1371,91 +790,32 @@
     );
   }
 
-  // 3D Model hover tilt parallax (now applied directly to 2D image + background drift across the viewport)
-  el.phoneScreenViewport.addEventListener("mousemove", (e) => {
-    if (state.isSpinning) return;
-    const shipImg = document.getElementById("spaceship-view-img");
-    if (!shipImg) return;
-
+  /* ---- Pointer / touch parallax -> real 3D camera orbit + ship lean ---- */
+  function pushTilt(clientX, clientY) {
+    const e = engine();
+    if (!e || state.isSpinning) return;
     const rect = el.phoneScreenViewport.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5; // -0.5 to 0.5
-    const y = (e.clientY - rect.top) / rect.height - 0.5; // -0.5 to 0.5
+    const x = (clientX - rect.left) / rect.width - 0.5;
+    const y = (clientY - rect.top) / rect.height - 0.5;
+    e.setTilt(x, y);
+    el.phoneScreenViewport.style.backgroundPosition =
+      `${50 + x * -12}% ${50 + y * -12}%`;
+  }
 
-    const rotateY = x * 22; // Yaw rotation range ±22 deg
-    const rotateX = y * -15;  // Pitch rotation range ±15 deg
-    const transX = x * 15;
-    const transY = y * 15;
-    
-    // Tilt the ship
-    shipImg.style.transform = `rotateY(${rotateY}deg) rotateX(${rotateX}deg) translate3d(${transX}px, ${transY}px, 0) scale(1.05)`;
-    
-    // Slide the starfield canvas in the opposite direction
-    const canvas = document.getElementById("starfield-canvas");
-    if (canvas) {
-      canvas.style.transform = `translate3d(${x * -20}px, ${y * -20}px, 0)`;
-      canvas.style.transition = "transform 0.15s ease-out";
-    }
-    
-    // Shift background planet space position
-    if (el.phoneScreenViewport) {
-      el.phoneScreenViewport.style.backgroundPosition = `${50 + x * -12}% ${50 + y * -12}%`;
-    }
-  });
+  function clearTilt() {
+    const e = engine();
+    if (e) e.setTilt(0, 0);
+    el.phoneScreenViewport.style.backgroundPosition = '50% 50%';
+  }
 
-  el.phoneScreenViewport.addEventListener("mouseleave", () => {
-    const shipImg = document.getElementById("spaceship-view-img");
-    if (shipImg) {
-      shipImg.style.transform = 'rotateY(0deg) rotateX(0deg) translate3d(0, 0, 0) scale(1)';
-    }
-    const canvas = document.getElementById("starfield-canvas");
-    if (canvas) {
-      canvas.style.transform = 'translate3d(0, 0, 0)';
-    }
-    if (el.phoneScreenViewport) {
-      el.phoneScreenViewport.style.backgroundPosition = '50% 50%';
-    }
-  });
+  el.phoneScreenViewport.addEventListener("mousemove", (ev) => pushTilt(ev.clientX, ev.clientY));
+  el.phoneScreenViewport.addEventListener("mouseleave", clearTilt);
+  el.phoneScreenViewport.addEventListener("touchmove", (ev) => {
+    const t = ev.touches[0];
+    if (t) pushTilt(t.clientX, t.clientY);
+  }, { passive: true });
+  el.phoneScreenViewport.addEventListener("touchend", clearTilt);
 
-  // Touch move parallax support for mobile devices
-  el.spaceshipContainer.addEventListener("touchmove", (e) => {
-    if (state.isSpinning) return;
-    const touch = e.touches[0];
-    const rect = el.spaceshipContainer.getBoundingClientRect();
-    const x = (touch.clientX - rect.left) / rect.width - 0.5;
-    const y = (touch.clientY - rect.top) / rect.height - 0.5;
-    if (x >= -0.5 && x <= 0.5 && y >= -0.5 && y <= 0.5) {
-      const shipImg = document.getElementById("spaceship-view-img");
-      if (shipImg) {
-        const rotateY = x * 22;
-        const rotateX = y * -15;
-        const transX = x * 15;
-        const transY = y * 15;
-        shipImg.style.transform = `rotateY(${rotateY}deg) rotateX(${rotateX}deg) translate3d(${transX}px, ${transY}px, 0) scale(1.05)`;
-        
-        const canvas = document.getElementById("starfield-canvas");
-        if (canvas) {
-          canvas.style.transform = `translate3d(${x * -20}px, ${y * -20}px, 0)`;
-        }
-        if (el.phoneScreenViewport) {
-          el.phoneScreenViewport.style.backgroundPosition = `${50 + x * -12}% ${50 + y * -12}%`;
-        }
-      }
-    }
-  });
-
-  el.spaceshipContainer.addEventListener("touchend", () => {
-    const shipImg = document.getElementById("spaceship-view-img");
-    if (shipImg) {
-      shipImg.style.transform = 'rotateY(0deg) rotateX(0deg) translate3d(0, 0, 0) scale(1)';
-    }
-    const canvas = document.getElementById("starfield-canvas");
-    if (canvas) {
-      canvas.style.transform = 'translate3d(0, 0, 0)';
-    }
-    if (el.phoneScreenViewport) {
-      el.phoneScreenViewport.style.backgroundPosition = '50% 50%';
-    }
-  });
 
   el.levelBadges.forEach(badge => {
     badge.addEventListener("click", () => {
@@ -1498,38 +858,25 @@
     }
   });
 
-  // Tuner Slider Listeners
-  const sliders = ["pitch", "roll", "yaw", "flame", "metal", "rough"];
-  sliders.forEach(id => {
-    const elSlider = document.getElementById(`tune-${id}`);
-    if (elSlider) {
-      elSlider.addEventListener("input", () => {
-        const val = elSlider.value;
-        const labelSuffix = (id === "flame") ? "px" : (id === "metal" || id === "rough") ? "" : "°";
-        const valText = (id === "metal" || id === "rough") ? parseFloat(val).toFixed(2) : val;
-        
-        document.getElementById(`val-${id}`).innerText = `${valText}${labelSuffix}`;
+  /* ---- Live engine telemetry in the sidebar (real numbers, sampled) ---- */
+  let fpsFrames = 0, fpsLast = performance.now();
+  function sampleEngineStats() {
+    fpsFrames++;
+    const now = performance.now();
+    if (now - fpsLast >= 500) {
+      const fps = Math.round((fpsFrames * 1000) / (now - fpsLast));
+      if (el.engFps) el.engFps.innerText = `${fps}`;
+      fpsFrames = 0;
+      fpsLast = now;
 
-        const shipImg = document.getElementById("spaceship-view-img");
-        if (shipImg) {
-          const pitch = document.getElementById("tune-pitch").value;
-          const roll = document.getElementById("tune-roll").value;
-          const yaw = document.getElementById("tune-yaw").value;
-          
-          const flameOffsetVal = parseInt(document.getElementById("tune-flame").value);
-          el.flameEffect.style.bottom = `${flameOffsetVal}px`;
-          levelConfig[state.activeLevel].flameOffset = flameOffsetVal;
-          levelConfig[state.activeLevel].orientation = `${roll}deg ${pitch}deg ${yaw}deg`;
-          levelConfig[state.activeLevel].metalness = parseFloat(document.getElementById("tune-metal").value);
-          levelConfig[state.activeLevel].roughness = parseFloat(document.getElementById("tune-rough").value);
-          
-          applyPBRSettings();
-        }
-      });
+      const e = engine();
+      if (e && el.engThrottle) {
+        el.engThrottle.innerText = `${Math.round(e.throttle * 100)}%`;
+      }
     }
-  });
-
-  // Model-viewer load listener removed (not needed for 2D mode)
+    requestAnimationFrame(sampleEngineStats);
+  }
+  requestAnimationFrame(sampleEngineStats);
 
   // Quit and Share Mock Triggers
   el.btnShare.addEventListener("click", () => {
@@ -1544,120 +891,40 @@
     }
   });
 
-  // Three.js 3D WebGL Engine Integration
-  let threeScene, threeCamera, threeRenderer, thrusterPointLight, ambientLight;
-  let threeParticles, particlePositions, particleVelocities;
-  
-  function initThreeEngine() {
-    if (typeof THREE === 'undefined') return;
-    
-    const viewport = el.phoneScreenViewport;
-    if (!viewport) return;
-    
-    threeScene = new THREE.Scene();
-    threeCamera = new THREE.PerspectiveCamera(45, viewport.clientWidth / viewport.clientHeight, 0.1, 1000);
-    threeCamera.position.z = 100;
-    
-    // WebGL Renderer
-    threeRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    threeRenderer.setSize(viewport.clientWidth, viewport.clientHeight);
-    threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    threeRenderer.domElement.style.position = 'absolute';
-    threeRenderer.domElement.style.top = '0';
-    threeRenderer.domElement.style.left = '0';
-    threeRenderer.domElement.style.width = '100%';
-    threeRenderer.domElement.style.height = '100%';
-    threeRenderer.domElement.style.pointerEvents = 'none';
-    threeRenderer.domElement.style.zIndex = '2';
-    
-    viewport.appendChild(threeRenderer.domElement);
-    
-    // 3D Lighting Setup
-    ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
-    threeScene.add(ambientLight);
-    
-    thrusterPointLight = new THREE.PointLight(0x00e5ff, 3, 150);
-    thrusterPointLight.position.set(0, -30, 20);
-    threeScene.add(thrusterPointLight);
-    
-    // 3D Engine Particle Buffer Geometry
-    const particleCount = 200;
-    const geometry = new THREE.BufferGeometry();
-    particlePositions = new Float32Array(particleCount * 3);
-    particleVelocities = new Float32Array(particleCount * 3);
-    
-    for (let i = 0; i < particleCount; i++) {
-      particlePositions[i * 3] = (Math.random() - 0.5) * 15;
-      particlePositions[i * 3 + 1] = -25 - Math.random() * 40;
-      particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 15;
-      
-      particleVelocities[i * 3] = (Math.random() - 0.5) * 0.4;
-      particleVelocities[i * 3 + 1] = -(Math.random() * 1.5 + 0.8);
-      particleVelocities[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
-    }
-    
-    geometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-    
-    const material = new THREE.PointsMaterial({
-      color: 0x00e5ff,
-      size: 2.2,
-      transparent: true,
-      opacity: 0.85,
-      blending: THREE.AdditiveBlending
-    });
-    
-    threeParticles = new THREE.Points(geometry, material);
-    threeScene.add(threeParticles);
-    
-    // Animation Loop
-    function renderThree() {
-      requestAnimationFrame(renderThree);
-      
-      // Update 3D particle positions
-      const positions = threeParticles.geometry.attributes.position.array;
-      const speedMult = state.isSpinning ? 3.5 : 1.0;
-      
-      for (let i = 0; i < particleCount; i++) {
-        positions[i * 3 + 1] += particleVelocities[i * 3 + 1] * speedMult;
-        positions[i * 3] += particleVelocities[i * 3] * speedMult;
-        
-        if (positions[i * 3 + 1] < -80) {
-          positions[i * 3 + 1] = -20;
-          positions[i * 3] = (Math.random() - 0.5) * 15;
-        }
+  /* ================= ENGINE HANDSHAKE + INIT ================= */
+
+  function onEngineReady() {
+    const e = engine();
+    if (!e) return;
+
+    // Report the real GPU/renderer string — no placeholder text
+    try {
+      const gl = e.renderer.getContext();
+      const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+      const raw = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : "WebGL2";
+      if (el.engRenderer) {
+        el.engRenderer.innerText = String(raw).replace(/^ANGLE \(|\)$/g, "").slice(0, 34);
       }
-      threeParticles.geometry.attributes.position.needsUpdate = true;
-      
-      // Light color update matching current active level
-      const config = levelConfig[state.activeLevel];
-      if (config && thrusterPointLight) {
-        thrusterPointLight.color.set(config.color || "#00e5ff");
-        thrusterPointLight.intensity = state.isSpinning ? 6.0 : 2.5;
-      }
-      
-      threeRenderer.render(threeScene, threeCamera);
+    } catch (_) {
+      if (el.engRenderer) el.engRenderer.innerText = "WebGL2";
     }
-    
-    renderThree();
+
+    // Push the current level into the freshly booted engine.
+    // ?lv=1..4 deep-links straight to a tier (shareable, and handy for QA).
+    const lv = parseInt(new URLSearchParams(location.search).get("lv"), 10);
+    switchLevel(levelConfig[lv] ? lv : state.activeLevel);
   }
 
-  // Init Operations
-  resizeCanvas();
-  window.addEventListener("resize", () => {
-    resizeCanvas();
-    initStars();
-  });
-  
-  initStars();
-  animateStarsAndSparks();
-  initThreeEngine();
-  
+  if (window.GachaEngine) onEngineReady();
+  else window.addEventListener("gacha-engine-ready", onEngineReady, { once: true });
+
   // Timer interval
   setInterval(updateTimer, 1000);
-  
-  // Initial syncs
+
+  // Initial syncs (UI only — the ship arrives with the engine handshake)
   updateWalletUI();
   updateProgressUI();
   switchLevel(4);
+
 
 })();

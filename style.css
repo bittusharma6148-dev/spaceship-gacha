@@ -266,6 +266,53 @@ body {
   letter-spacing: 1.5px;
 }
 
+/* ---- Live render-engine telemetry ---- */
+.engine-stats {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.engine-stats li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(229, 169, 59, 0.08);
+}
+
+.engine-stats li::before { content: none; }
+
+.engine-stats span {
+  color: #8c91ab;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.engine-stats b {
+  font-family: var(--f-mono, monospace);
+  font-weight: 700;
+  color: var(--level-color, #00d5ff);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 62%;
+  transition: color 0.3s ease;
+}
+
+.engine-note {
+  font-size: 9.5px;
+  line-height: 1.55;
+  color: #6e738c;
+  margin: 0;
+}
+
 .instructions ul {
   list-style: none;
   display: flex;
@@ -363,16 +410,32 @@ body {
   opacity: 0.95;
 }
 
-/* Starfield Overlay Canvas */
-#starfield-canvas {
+/* REAL 3D STAGE — hosts the WebGL canvas (ship, pedestal, flames, starfield).
+   Sits above the sky plate, below every piece of UI chrome. */
+#stage-3d {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   z-index: 2;
   pointer-events: none;
-  opacity: 0.9;
+  overflow: hidden;
+}
+
+#stage-3d canvas {
+  display: block;
+}
+
+/* If WebGL is unavailable we say so rather than faking a ship. */
+.no-webgl .spaceship-stage::after {
+  content: "3D ENGINE UNAVAILABLE — WebGL REQUIRED";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--f-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #ff5470;
+  text-align: center;
 }
 
 /* Camera Screen Shake Effect */
@@ -652,8 +715,16 @@ body {
   justify-content: center;
   align-items: center;
   z-index: 12; /* Elevated above middle-status-row to prevent half-partition clipping */
-  background: var(--level-bg-grad);
-  transition: background 0.4s ease;
+  /* No background here — the level glow is real bloom from the WebGL pass
+     underneath. A gradient plate would sit on top of the ship and flatten it. */
+  background: none;
+  pointer-events: none;
+}
+
+/* …but the controls that live inside the stage still need to be clickable. */
+.spaceship-stage .level-selector,
+.spaceship-stage .lv-badge {
+  pointer-events: auto;
 }
 
 /* Pedestal Platform */
