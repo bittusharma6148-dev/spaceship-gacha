@@ -617,12 +617,14 @@
 
     // Warp-drive lens flare over the WebGL frame, timed to engine release
     if (el.launchFlash) {
+      // Timed to the engine's release beat (~igniteEnd) so the white flash
+      // punches exactly as the ship breaks off the pad.
       gsap.fromTo(el.launchFlash,
         { opacity: 0, scale: 0.6 },
         {
-          opacity: 0.9, scale: 1.8, duration: 0.12, delay: 0.5, ease: "power2.out",
+          opacity: 0.92, scale: 1.9, duration: 0.1, delay: 1.0, ease: "power2.out",
           onComplete: () => gsap.to(el.launchFlash,
-            { opacity: 0, scale: 2.5, duration: 0.9, ease: "power3.out" })
+            { opacity: 0, scale: 2.6, duration: 0.9, ease: "power3.out" })
         }
       );
     }

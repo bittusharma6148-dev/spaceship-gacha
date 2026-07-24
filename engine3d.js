@@ -49,8 +49,8 @@ const SHIPS = {
     radius: 0.5,
     noseLen: 1.05,
     wings: 3,
-    wingSpan: 0.86,
-    wingDrop: 1.0,
+    wingSpan: 1.02,
+    wingDrop: 1.15,
     boosters: 0,
     engines: [{ x: 0, z: 0, r: 0.34 }],
     chevrons: 2,
@@ -67,8 +67,8 @@ const SHIPS = {
     radius: 0.58,
     noseLen: 1.15,
     wings: 4,
-    wingSpan: 0.95,
-    wingDrop: 1.1,
+    wingSpan: 1.12,
+    wingDrop: 1.25,
     boosters: 2,
     boosterScale: 0.54,
     engines: [
@@ -89,8 +89,8 @@ const SHIPS = {
     radius: 0.72,
     noseLen: 1.15,
     wings: 3,
-    wingSpan: 1.18,
-    wingDrop: 1.18,
+    wingSpan: 1.34,
+    wingDrop: 1.34,
     boosters: 2,
     boosterScale: 0.66,
     engines: [
@@ -112,8 +112,8 @@ const SHIPS = {
     radius: 0.66,
     noseLen: 1.2,
     wings: 4,
-    wingSpan: 1.06,
-    wingDrop: 1.25,
+    wingSpan: 1.28,
+    wingDrop: 1.4,
     boosters: 2,
     boosterScale: 0.58,
     engines: [
@@ -972,7 +972,9 @@ class GachaEngine {
       }
     }
 
-    /* ---- big swept wings (widest feature, drives the silhouette) */
+    /* ---- big swept wings: BLUE panel framed in GOLD, like the reference.
+       Built as three stacked layers so the gold reads as a trim edge around a
+       hull-coloured face, not a flat slab. */
     const wingGeo = this._wingGeo(spec);
     this.disposables.push(wingGeo);
     for (let i = 0; i < spec.wings; i++) {
@@ -981,18 +983,41 @@ class GachaEngine {
       const pivot = new THREE.Group();
       pivot.rotation.y = a;
 
-      const wing = new THREE.Mesh(wingGeo, M.gold);
-      wing.position.set(R * 0.80, -H * 0.26, -0.065);
-      wing.castShadow = true;
-      pivot.add(wing);
+      // 1. gold frame (full size, the visible trim edge)
+      const frame = new THREE.Mesh(wingGeo, M.gold);
+      frame.position.set(R * 0.78, -H * 0.24, -0.08);
+      frame.castShadow = true;
+      pivot.add(frame);
 
-      // blue inset panel near the root
-      const inset = new THREE.Mesh(wingGeo, M.hull);
-      inset.position.set(R * 0.80, -H * 0.26 + 0.14, -0.065);
-      inset.scale.set(0.56, 0.6, 1.18);
-      pivot.add(inset);
+      // 2. blue face on both sides, inset so gold shows as a border
+      for (const z of [0.055, -0.055]) {
+        const face = new THREE.Mesh(wingGeo, M.hull);
+        face.position.set(R * 0.78, -H * 0.24 + 0.06, z);
+        face.scale.set(0.78, 0.82, 0.4);
+        pivot.add(face);
+      }
+
+      // 3. bright gold leading-edge rib along the swept front
+      const rib = new THREE.Mesh(
+        new THREE.BoxGeometry(0.09, spec.wingDrop * 1.35, 0.2), M.gold
+      );
+      rib.position.set(R * 0.78 + spec.wingSpan * 0.5, -H * 0.28, 0);
+      rib.rotation.z = 0.62;
+      rib.castShadow = true;
+      pivot.add(rib);
 
       g.add(pivot);
+    }
+
+    /* ---- gold vertical accent stripes down the barrel (reference detail) */
+    for (const side of [0.5, -0.5]) {
+      const stripe = new THREE.Mesh(
+        new THREE.BoxGeometry(0.07, H * 0.52, 0.06), M.gold
+      );
+      const ang = side * 0.9;
+      stripe.position.set(Math.sin(ang) * R * 0.98, H * 0.04, Math.cos(ang) * R * 0.98);
+      stripe.rotation.y = -ang;
+      g.add(stripe);
     }
 
     /* ---- side boosters: pale nose cap, blue tube, gold skirt */
@@ -1046,6 +1071,15 @@ class GachaEngine {
     housing.position.y = -H * 0.5 - 0.1;
     housing.castShadow = true;
     g.add(housing);
+
+    // glowing intake band just above the housing — reads as live engine energy
+    const intakeMat = new THREE.MeshBasicMaterial({ color: spec.flameEdge });
+    this.disposables.push(intakeMat);
+    const intake = new THREE.Mesh(
+      new THREE.CylinderGeometry(R * 1.03, R * 1.03, 0.1, 48, 1, true), intakeMat
+    );
+    intake.position.y = -H * 0.5 + 0.14;
+    g.add(intake);
 
     /* ---- engine nozzles + glowing throats */
     this.nozzles = [];
@@ -1266,25 +1300,74 @@ class GachaEngine {
     if (this.isLaunching) return Promise.resolve();
     this.isLaunching = true;
     this._launchT = 0;
-    this.targetThrottle = 1.0;
-    this.targetWarp = 1.0;
-    this.shake = 1.0;
+    this._fired = false;          // liftoff burst fires once
+    this.targetWarp = 0;          // warp holds until release, then snaps on
 
+    // The flight runs in three beats: CHARGE (pad spins up, ship crouches),
+    // IGNITION (violent hold-down rattle), LIFT (explosive climb). Durations
+    // scale with tier weight so the heavy lifter feels heavy.
+    const dur = { 1: 2.0, 2: 2.2, 3: 2.8, 4: 2.4 }[this.level] || 2.3;
+    this._launchDur = dur;
+    this._chargeEnd = 0.24;       // fraction: end of charge
+    this._igniteEnd = 0.44;       // fraction: release point
+
+    return new Promise(resolve => { this._launchResolve = resolve; });
+  }
+
+  _fireLiftoff() {
+    this._fired = true;
+    this.shake = 1.0;
     this.shock.visible = true;
     this._shockT = 0;
 
-    const profile = { 1: 1.5, 2: 1.75, 3: 2.35, 4: 1.9 }[this.level] || 1.9;
-    this._launchDur = profile;
-
-    return new Promise(resolve => { this._launchResolve = resolve; });
+    // ground smoke burst: a ring of billboarded puffs that bloom outward once
+    if (!this.smoke) {
+      const COUNT = 60;
+      const pos = new Float32Array(COUNT * 3);
+      const siz = new Float32Array(COUNT);
+      const seed = new Float32Array(COUNT);
+      this.smokeVel = new Float32Array(COUNT * 3);
+      for (let i = 0; i < COUNT; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 2 + Math.random() * 5;
+        pos[i * 3] = 0; pos[i * 3 + 1] = 0; pos[i * 3 + 2] = 0;
+        this.smokeVel[i * 3] = Math.cos(a) * sp;
+        this.smokeVel[i * 3 + 1] = 0.5 + Math.random() * 1.5;
+        this.smokeVel[i * 3 + 2] = Math.sin(a) * sp * 0.5;
+        siz[i] = 4 + Math.random() * 5;
+        seed[i] = Math.random();
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setAttribute('aSize', new THREE.BufferAttribute(siz, 1));
+      g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+      this.smokeUniforms = {
+        uTime: { value: 0 }, uWarp: { value: 0 },
+        uColor: { value: new THREE.Color(0xbfe6ff) }
+      };
+      const m = new THREE.ShaderMaterial({
+        uniforms: this.smokeUniforms, vertexShader: STAR_VERT, fragmentShader: STAR_FRAG,
+        transparent: true, depthWrite: false, blending: THREE.NormalBlending
+      });
+      this.smoke = new THREE.Points(g, m);
+      this.smoke.position.y = this.pedestal.position.y + 0.3;
+      this.scene.add(this.smoke);
+      this.disposables.push(g, m);
+    }
+    this._smokeBase = this.smoke.geometry.attributes.position.array.slice();
+    this._smokeT = 0;
+    this.smoke.visible = true;
   }
 
   reset() {
     this.isLaunching = false;
     this._launchT = 0;
+    this._fired = false;
+    this.padSurge = 0;
     this.targetThrottle = 0.28;
     this.targetWarp = 0;
     this.shake = 0;
+    if (this.smoke) this.smoke.visible = false;
     if (this.shipRoot) {
       this.shipRoot.position.set(0, 0, 0);
       this.shipRoot.scale.setScalar(1);
@@ -1317,25 +1400,37 @@ class GachaEngine {
       this.shipRoot.scale.setScalar(0.78 + 0.22 * e);
     }
 
-    // ---- launch flight
+    // ---- launch flight: CHARGE -> IGNITION -> LIFT
     if (this.isLaunching) {
       this._launchT += dt;
       const p = Math.min(this._launchT / this._launchDur, 1);
 
-      if (p < 0.32) {
-        // hold-down: violent engine vibration before release
-        const v = p / 0.32;
-        this.shipRoot.position.y = v * 0.22 + (Math.random() - 0.5) * 0.09 * v;
-        this.shipRoot.position.x = (Math.random() - 0.5) * 0.07 * v;
-        this.shipRoot.rotation.y += dt * 0.5;
+      if (p < this._chargeEnd) {
+        // CHARGE: engines spool up, pad energy surges, ship crouches slightly
+        const v = p / this._chargeEnd;
+        this.targetThrottle = 0.4 + v * 0.4;
+        this.shipRoot.position.y = -0.14 * v;                 // squat before the leap
+        this.shipRoot.position.x = (Math.random() - 0.5) * 0.02 * v;
+        this.padSurge = v;
+      } else if (p < this._igniteEnd) {
+        // IGNITION: full throttle, violent hold-down rattle, then release burst
+        const v = (p - this._chargeEnd) / (this._igniteEnd - this._chargeEnd);
+        this.targetThrottle = 1.0;
+        const jitter = 0.14 * (0.4 + v);
+        this.shipRoot.position.y = -0.14 + v * 0.26 + (Math.random() - 0.5) * jitter;
+        this.shipRoot.position.x = (Math.random() - 0.5) * jitter * 0.7;
+        this.padSurge = 1;
+        if (!this._fired && v > 0.86) this._fireLiftoff();   // fire the burst on release
       } else {
-        // release: accelerating climb with a slight barrel roll
-        const c = (p - 0.32) / 0.68;
-        const acc = Math.pow(c, 2.6);
-        this.shipRoot.position.y = 0.22 + acc * 26;
+        // LIFT: explosive accelerating climb with a fast barrel roll
+        if (!this._fired) this._fireLiftoff();
+        this.targetWarp = 1.0;
+        const c = (p - this._igniteEnd) / (1 - this._igniteEnd);
+        const acc = Math.pow(c, 2.7);
+        this.shipRoot.position.y = 0.12 + acc * 34;
         this.shipRoot.position.x = 0;
-        this.shipRoot.rotation.y += dt * (0.5 + c * 7);
-        this.shipRoot.scale.setScalar(1 - c * 0.35);
+        this.shipRoot.rotation.y += dt * (1.0 + c * 11);      // spin up as it screams away
+        this.shipRoot.scale.setScalar(1 - c * 0.4);
       }
 
       if (p >= 1 && this._launchResolve) {
@@ -1346,10 +1441,35 @@ class GachaEngine {
       }
     }
 
-    // ---- camera shake, decaying
+    // ---- liftoff smoke burst expands then fades
+    if (this.smoke && this.smoke.visible) {
+      this._smokeT += dt;
+      const sp = this._smokeT;
+      const arr = this.smoke.geometry.attributes.position.array;
+      for (let i = 0; i < arr.length / 3; i++) {
+        arr[i * 3]     = this._smokeBase[i * 3]     + this.smokeVel[i * 3]     * sp;
+        arr[i * 3 + 1] = this._smokeBase[i * 3 + 1] + this.smokeVel[i * 3 + 1] * sp;
+        arr[i * 3 + 2] = this._smokeBase[i * 3 + 2] + this.smokeVel[i * 3 + 2] * sp;
+      }
+      this.smoke.geometry.attributes.position.needsUpdate = true;
+      this.smoke.material.opacity = Math.max(0, 1 - sp / 1.4);
+      if (sp > 1.4) this.smoke.visible = false;
+    }
+
+    // ---- camera: dolly-punch on ignition + decaying shake
+    // A quick push-in during the hold-down, snapping back as the ship leaves —
+    // this is what sells the launch as an event rather than a slide-up.
+    let dollyZ = this.camZ;
+    if (this.isLaunching) {
+      const p = Math.min(this._launchT / this._launchDur, 1);
+      if (p < this._igniteEnd) dollyZ = this.camZ - (p / this._igniteEnd) * 2.4;
+      else dollyZ = this.camZ - 2.4 + ((p - this._igniteEnd) / (1 - this._igniteEnd)) * 5;
+    }
+    this.camera.position.z += (dollyZ - this.camera.position.z) * Math.min(dt * 6, 1);
+
     if (this.shake > 0.001) {
       this.shake = Math.max(0, this.shake - dt * 0.55);
-      const s = this.shake * this.shake * 0.35;
+      const s = this.shake * this.shake * 0.45;
       this.camera.position.x = (Math.random() - 0.5) * s;
       this.camera.position.y = this.camY + (Math.random() - 0.5) * s;
     } else {
@@ -1385,7 +1505,11 @@ class GachaEngine {
     // ---- pedestal
     this.ringA.rotation.z += dt * 0.55;
     this.ringB.rotation.z -= dt * 0.9;
-    this.padMat.opacity = 0.09 + this.throttle * 0.2 + Math.sin(t * 4) * 0.03;
+    // pad energy surges hard during the charge/ignition build-up
+    const surge = this.padSurge || 0;
+    this.padMat.opacity = 0.09 + this.throttle * 0.2 + surge * 0.55 + Math.sin(t * 4) * 0.03;
+    this.ringA.rotation.z += dt * surge * 3;     // rings spin up with the charge
+    this.ringB.rotation.z -= dt * surge * 4;
     this.pedestal.visible = !(this.isLaunching && this._launchT > this._launchDur * 0.75);
 
     // ---- shockwave
