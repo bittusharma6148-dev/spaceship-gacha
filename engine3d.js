@@ -28,6 +28,13 @@ const NOSE_NECK = 0.72;
 // The launch deck burns amber in the reference regardless of ship tier.
 const PAD_GOLD = 0xffb03a;
 
+// Ship hovers this high above the deck, leaving a gap where the vortex glows.
+const SHIP_LIFT = 0.7;
+
+// Downward camera pitch (radians) — the reference's 3/4 hero angle, which
+// reveals the deck top and the vortex ellipse instead of viewing them edge-on.
+const CAM_PITCH = 0.28;
+
 const GOLD = 0xffb121;
 const GOLD_DEEP = 0xc9781a;
 const HULL_WHITE = 0xdfe9f5;
@@ -104,8 +111,8 @@ const SHIPS = {
   4: {
     name: 'FLAGSHIP',
     accent: 0x00d5ff,
-    flameCore: 0xffffff,
-    flameEdge: 0x00b0ff,
+    flameCore: 0xbfeaff,
+    flameEdge: 0x1e7bff,
     hull: 0x1a6ad8,          // the reference's bright royal blue
     nose: 0x8fdcf5,          // pale cyan nose cap
     body: 3.7,
@@ -188,14 +195,14 @@ const FLAME_FRAG = /* glsl */`
     radial = smoothstep(0.0, 0.55, radial);
 
     float a = clamp(ragged * radial, 0.0, 1.0);
-    a *= (0.12 + uThrottle * 0.5) * uGain;
+    a *= (0.13 + uThrottle * 0.55) * uGain;
     if (a < 0.01) discard;
 
     // white-hot at the throat, level colour further out
     float heat = smoothstep(0.5, 0.0, y) * 0.85 + uThrottle * 0.15;
     vec3 col = mix(uEdge, uCore, clamp(heat, 0.0, 1.0));
     // a restrained hot core: enough to catch bloom, not enough to blow the hull out
-    col += uCore * pow(1.0 - y, 7.0) * (0.14 + uThrottle * 0.4);
+    col += uCore * pow(1.0 - y, 8.0) * (0.08 + uThrottle * 0.35);
 
     gl_FragColor = vec4(col, a);
   }
@@ -227,6 +234,8 @@ const STAR_VERT = /* glsl */`
 const STAR_FRAG = /* glsl */`
   uniform vec3 uColor;
   uniform float uWarp;
+  uniform float uAlpha;   // master fade — sparks ride this down at idle
+  uniform float uWhite;   // wash toward white: stars high, sparks low
   varying float vAlpha;
   varying float vSeed;
   void main() {
@@ -234,10 +243,52 @@ const STAR_FRAG = /* glsl */`
     // stretch the sprite vertically as warp ramps up -> real motion streaks
     c.y /= (1.0 + uWarp * 5.0);
     float d = length(c);
-    float a = smoothstep(0.5, 0.0, d) * vAlpha;
+    float a = smoothstep(0.5, 0.0, d) * vAlpha * uAlpha;
     if (a < 0.01) discard;
-    vec3 col = mix(vec3(1.0), uColor, 0.35 + vSeed * 0.3);
+    vec3 col = mix(uColor, vec3(1.0), uWhite + vSeed * 0.2);
     gl_FragColor = vec4(col, a);
+  }
+`;
+
+/* ----------------------------------------------------------- vortex shader */
+
+// Swirling energy portal for the launch deck's core — the glowing orange
+// whirlpool from the reference. Polar-coordinate spiral, hot centre, animated.
+const VORTEX_FRAG = /* glsl */`
+  uniform float uTime;
+  uniform vec3  uHot;
+  uniform vec3  uCool;
+  varying vec2  vUv;
+
+  void main() {
+    vec2 p = vUv - 0.5;
+    float r = length(p) * 2.0;             // 0 centre .. 1 rim
+    if (r > 1.0) discard;
+    float ang = atan(p.y, p.x);
+
+    // logarithmic spiral arms winding inward, rotating over time
+    float spiral = sin(ang * 3.0 + r * 14.0 - uTime * 3.0);
+    float arms = 0.5 + 0.5 * spiral;
+
+    // bright core, arms fading toward the rim
+    float core = smoothstep(0.55, 0.0, r);
+    float body = smoothstep(1.0, 0.15, r);
+    float glow = core * 1.6 + body * arms * 0.9;
+
+    vec3 col = mix(uCool, uHot, clamp(core + arms * 0.4, 0.0, 1.0));
+    col += uHot * core * 1.2;              // over-bright centre drives bloom
+
+    float a = clamp(glow, 0.0, 1.0) * body;
+    if (a < 0.01) discard;
+    gl_FragColor = vec4(col, a);
+  }
+`;
+
+const VORTEX_VERT = /* glsl */`
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
@@ -247,8 +298,8 @@ class GachaEngine {
   constructor(container) {
     this.container = container;
     this.level = 4;
-    this.throttle = 0.28;      // idle burn
-    this.targetThrottle = 0.28;
+    this.throttle = 0.24;      // idle burn
+    this.targetThrottle = 0.24;
     this.warp = 0;
     this.targetWarp = 0;
     this.isLaunching = false;
@@ -389,6 +440,8 @@ class GachaEngine {
     this.starUniforms = {
       uTime: { value: 0 },
       uWarp: { value: 0 },
+      uAlpha: { value: 1 },
+      uWhite: { value: 0.55 },        // stars stay bright and white-ish
       uColor: { value: new THREE.Color(0x00d5ff) }
     };
 
@@ -700,12 +753,51 @@ class GachaEngine {
       blending: THREE.AdditiveBlending,
       depthWrite: false
     });
-    const pad = new THREE.Mesh(new THREE.CircleGeometry(2.15, 48), this.padMat);
-    pad.rotation.x = -Math.PI / 2;
-    pad.position.y = 0.29;
-    grp.add(pad);
+    // dark recessed well the vortex sits in, so it reads as a portal in the deck
+    const well = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.75, 1.55, 0.2, 64),
+      new THREE.MeshStandardMaterial({ color: 0x0a1420, metalness: 0.6, roughness: 0.5 })
+    );
+    well.position.y = 0.2;
+    grp.add(well);
+    this.disposables.push(well.geometry, well.material);
 
-    // counter-rotating tech rings
+    // concentric inset tech rings machined into the deck top
+    for (let i = 0; i < 3; i++) {
+      const rr = 1.9 + i * 0.22;
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(rr, 0.05, 6, 80), deckDark
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.3;
+      grp.add(ring);
+      this.disposables.push(ring.geometry);
+    }
+
+    // THE VORTEX — swirling orange energy core, animated in the loop
+    this.vortexMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uHot: { value: new THREE.Color(0xffd257) },
+        uCool: { value: new THREE.Color(0xff6a1a) }
+      },
+      vertexShader: VORTEX_VERT,
+      fragmentShader: VORTEX_FRAG,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide
+    });
+    this.vortex = new THREE.Mesh(new THREE.CircleGeometry(1.9, 64), this.vortexMat);
+    this.vortex.rotation.x = -Math.PI / 2;
+    this.vortex.position.y = 0.32;
+    grp.add(this.vortex);
+    this.disposables.push(this.vortex.geometry, this.vortexMat);
+
+    // faint level-coloured wash over the vortex (kept for recolour hook)
+    this.padMat.opacity = 0;
+
+    // counter-rotating outer tech rings (level-coloured)
     this.ringA = new THREE.Mesh(
       new THREE.TorusGeometry(2.42, 0.05, 8, 96),
       new THREE.MeshBasicMaterial({ color: 0x00d5ff, transparent: true, opacity: 0.9,
@@ -716,7 +808,7 @@ class GachaEngine {
     grp.add(this.ringA);
 
     this.ringB = new THREE.Mesh(
-      new THREE.TorusGeometry(1.85, 0.032, 8, 72),
+      new THREE.TorusGeometry(2.02, 0.032, 8, 72),
       new THREE.MeshBasicMaterial({ color: 0x00d5ff, transparent: true, opacity: 0.6,
         blending: THREE.AdditiveBlending, depthWrite: false })
     );
@@ -871,17 +963,20 @@ class GachaEngine {
     const s = new THREE.Shape();
     const span = spec.wingSpan;
     const drop = spec.wingDrop;
-    // Narrow at the tip and strongly raked, so it reads as a swept fin rather
-    // than the flat slab a straight quad gives you.
-    s.moveTo(0, 0.62);
-    s.lineTo(span * 0.5, -drop * 0.14);
-    s.lineTo(span, -drop * 0.78);
-    s.lineTo(span * 0.82, -drop);
-    s.lineTo(0, -drop * 0.66);
+    // Aggressive fighter-jet fin: notched leading edge and a hooked rear talon
+    // instead of a plain triangle, for a futuristic silhouette.
+    s.moveTo(0, 0.72);
+    s.lineTo(span * 0.34, 0.36);          // shoulder
+    s.lineTo(span * 0.64, 0.04);          // leading-edge notch
+    s.lineTo(span, -drop * 0.5);          // swept tip
+    s.lineTo(span * 0.97, -drop * 0.82);
+    s.lineTo(span * 0.72, -drop);         // rear talon
+    s.lineTo(span * 0.48, -drop * 0.84);
+    s.lineTo(0, -drop * 0.64);
     s.closePath();
     return new THREE.ExtrudeGeometry(s, {
-      depth: 0.16, bevelEnabled: true, bevelThickness: 0.04,
-      bevelSize: 0.04, bevelSegments: 2
+      depth: 0.17, bevelEnabled: true, bevelThickness: 0.045,
+      bevelSize: 0.045, bevelSegments: 2
     });
   }
 
@@ -1005,6 +1100,27 @@ class GachaEngine {
       rib.rotation.z = 0.62;
       rib.castShadow = true;
       pivot.add(rib);
+
+      // 4. glowing energy strip inset on each face — the futuristic accent
+      for (const z of [0.12, -0.12]) {
+        const glowStrip = new THREE.Mesh(
+          new THREE.BoxGeometry(0.05, spec.wingDrop * 1.05, 0.02),
+          new THREE.MeshBasicMaterial({ color: spec.flameEdge })
+        );
+        glowStrip.position.set(R * 0.78 + spec.wingSpan * 0.34, -H * 0.28, z);
+        glowStrip.rotation.z = 0.6;
+        pivot.add(glowStrip);
+        this.disposables.push(glowStrip.material);
+      }
+
+      // 5. gold winglet tip cap for a sharper, layered read
+      const tip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.14, 0.5, 0.24), M.gold
+      );
+      tip.position.set(R * 0.78 + spec.wingSpan, -H * 0.24 - spec.wingDrop * 0.5, 0);
+      tip.rotation.z = 0.5;
+      tip.castShadow = true;
+      pivot.add(tip);
 
       g.add(pivot);
     }
@@ -1131,10 +1247,14 @@ class GachaEngine {
 
     this.camZ = viewH / (2 * Math.tan(halfFov));
     // put the box centre at FRAME_CENTRE down the screen instead of dead middle
-    this.camY = centre - (0.5 - FRAME_CENTRE) * viewH;
+    this.aimY = centre - (0.5 - FRAME_CENTRE) * viewH;
+
+    // Lift the camera and aim down at the assembly so the deck top and its
+    // vortex read as an ellipse (the reference's 3/4 hero angle), not edge-on.
+    this.camY = this.aimY + this.camZ * Math.tan(CAM_PITCH);
 
     this.camera.position.set(0, this.camY, this.camZ);
-    this.camera.lookAt(0, this.camY, 0);
+    this.camera.lookAt(0, this.aimY, 0);
   }
 
 
@@ -1170,8 +1290,8 @@ class GachaEngine {
       // ConeGeometry puts the apex at +Y and the wide base at -Y. Flip it so the
       // BASE sits at the nozzle mouth (y = 0) and the apex tapers away downward,
       // otherwise the plume fires up through the hull.
-      const len = n.r * 5;
-      const geo = new THREE.ConeGeometry(n.r * 1.05, len, 28, 1, true);
+      const len = n.r * 4.6;
+      const geo = new THREE.ConeGeometry(n.r * 0.95, len, 28, 1, true);
       geo.rotateX(Math.PI);
       geo.translate(0, -len / 2, 0);   // base at y=0, apex at y=-len
 
@@ -1210,6 +1330,8 @@ class GachaEngine {
     this.sparkUniforms = {
       uTime: { value: 0 },
       uWarp: { value: 0 },
+      uAlpha: { value: 0.15 },        // faint at idle, driven up on launch
+      uWhite: { value: 0.15 },        // stay in the flame colour, not white
       uColor: { value: new THREE.Color(spec.flameEdge) }
     };
 
@@ -1264,7 +1386,7 @@ class GachaEngine {
     this.sparks = this._buildSparks(spec);
     this.shipRoot.add(this.sparks);
 
-    this.shipRoot.position.set(0, 0, 0);
+    this.shipRoot.position.set(0, SHIP_LIFT, 0);   // framed at hover height
     this.scene.add(this.shipRoot);
 
     // Re-fit the camera: each tier has its own proportions.
@@ -1343,6 +1465,7 @@ class GachaEngine {
       g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
       this.smokeUniforms = {
         uTime: { value: 0 }, uWarp: { value: 0 },
+        uAlpha: { value: 1 }, uWhite: { value: 0.7 },
         uColor: { value: new THREE.Color(0xbfe6ff) }
       };
       const m = new THREE.ShaderMaterial({
@@ -1364,7 +1487,7 @@ class GachaEngine {
     this._launchT = 0;
     this._fired = false;
     this.padSurge = 0;
-    this.targetThrottle = 0.28;
+    this.targetThrottle = 0.24;
     this.targetWarp = 0;
     this.shake = 0;
     if (this.smoke) this.smoke.visible = false;
@@ -1389,7 +1512,8 @@ class GachaEngine {
     // ---- ship idle motion: a slow hover only. No spin, no lean — the
     // reference client presents the ship dead-on and perfectly still.
     if (this.shipRoot && !this.isLaunching) {
-      this.shipRoot.position.y = Math.sin(t * 1.15) * 0.09;
+      // lifted clear of the deck so the vortex glows in the gap below the engines
+      this.shipRoot.position.y = SHIP_LIFT + Math.sin(t * 1.15) * 0.1;
       this.shipRoot.rotation.set(0, 0, 0);
     }
 
@@ -1476,7 +1600,7 @@ class GachaEngine {
       this.camera.position.x += (0 - this.camera.position.x) * dt * 4;
       this.camera.position.y += (this.camY - this.camera.position.y) * dt * 4;
     }
-    this.camera.lookAt(0, this.camera.position.y, 0);
+    this.camera.lookAt(0, this.aimY, 0);
 
     // ---- flames
     if (this.flameUniforms) {
@@ -1488,7 +1612,7 @@ class GachaEngine {
 
     // ---- flame plumes lengthen with throttle
     if (this.flames) {
-      const s = 0.55 + this.throttle * 1.1;
+      const s = 0.5 + this.throttle * 1.5;
       for (const f of this.flames) f.scale.set(1, s, 1);
     }
 
@@ -1505,9 +1629,13 @@ class GachaEngine {
     // ---- pedestal
     this.ringA.rotation.z += dt * 0.55;
     this.ringB.rotation.z -= dt * 0.9;
-    // pad energy surges hard during the charge/ignition build-up
+    // vortex swirls faster and flares brighter as the launch charges
     const surge = this.padSurge || 0;
-    this.padMat.opacity = 0.09 + this.throttle * 0.2 + surge * 0.55 + Math.sin(t * 4) * 0.03;
+    if (this.vortexMat) {
+      this.vortexMat.uniforms.uTime.value = t * (1 + surge * 2.5) + this.throttle;
+      const pulse = 1 + surge * 0.35 + Math.sin(t * 3) * 0.04;
+      this.vortex.scale.setScalar(pulse);
+    }
     this.ringA.rotation.z += dt * surge * 3;     // rings spin up with the charge
     this.ringB.rotation.z -= dt * surge * 4;
     this.pedestal.visible = !(this.isLaunching && this._launchT > this._launchDur * 0.75);
@@ -1534,6 +1662,8 @@ class GachaEngine {
       this.sparks.geometry.attributes.position.needsUpdate = true;
       this.sparkUniforms.uTime.value = t;
       this.sparkUniforms.uWarp.value = this.warp * 0.6;
+      // faint at idle, blazing on launch — this is what kept the vortex hidden
+      this.sparkUniforms.uAlpha.value = 0.08 + this.throttle * 0.9;
     }
 
     // ---- stars streak toward camera during warp
