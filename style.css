@@ -3080,7 +3080,7 @@ model-viewer {
    Overrides every size driver so the panel fits without stretching.
    ================================================================ */
 .rewards-section {
-  flex: 0 0 26% !important;
+  flex: 0 0 27% !important;
   min-height: 0 !important;
   margin: 6px 10px 8px 10px !important;
   padding: 12px 10px 8px 10px !important;
@@ -3120,19 +3120,19 @@ model-viewer {
   flex: none !important;
 }
 /* card art area scales to the row; keeps a clean square-ish tile */
-.reward-card .card-inner { min-height: 0 !important; aspect-ratio: 1 / 0.64; }
+.reward-card .card-inner { min-height: 0 !important; height: 41px !important; }
 .reward-icon-wrap { width: 100% !important; height: 100% !important; }
 .reward-img-thumbnail { max-width: 72% !important; max-height: 72% !important; }
 .reward-value {
   margin-top: 2px !important;
-  padding: 1px 7px !important;
+  padding: 0px 7px !important;
   font-size: 9px !important;
 }
 .chance-tag { font-size: 7px !important; padding: 1px 3px !important; }
 
 .action-footer { gap: 4px !important; margin-top: 3px !important; }
-.btn-action-primary { height: 30px !important; font-size: 12px !important; }
-.btn-action-sub { height: 22px !important; font-size: 10px !important; }
+.btn-action-primary { height: 28px !important; font-size: 12px !important; }
+.btn-action-sub { height: 20px !important; font-size: 10px !important; }
 
 /* The stage now owns everything above the panel — let it breathe full width. */
 .spaceship-stage { height: auto !important; flex: 1; }
@@ -3140,6 +3140,163 @@ model-viewer {
 
 /* trim the top chrome so the rocket gets the lion's share of height */
 .lucky-bag-banner { margin-top: 4px !important; }
+
+/* ================================================================
+   AAA PREMIUM UI LAYER  —  console-grade panels, glass, glow, depth.
+   Reusable tokens; overrides win by being last. Architecture intact.
+   ================================================================ */
+:root {
+  --pm-cyan: #22e0ff;
+  --pm-cyan-deep: #0088b3;
+  --pm-gold: #ffcf5a;
+  --pm-gold-deep: #b8791a;
+  --pm-glass: linear-gradient(160deg, rgba(14,40,54,0.92) 0%, rgba(6,20,30,0.96) 100%);
+  --pm-glass-lit: linear-gradient(160deg, rgba(0,150,190,0.30) 0%, rgba(6,26,38,0.94) 60%);
+  --pm-glow-cyan: 0 0 14px rgba(34,224,255,0.55);
+  --pm-inner: inset 0 1px 0 rgba(180,240,255,0.28), inset 0 0 12px rgba(0,120,160,0.25);
+  --pm-gold-frame: linear-gradient(150deg, #ffe08a 0%, #c9881f 45%, #ffd873 100%);
+}
+
+/* ---------- LEFT PANEL: glass level buttons, cyan glow, bright borders ---- */
+.level-selector { gap: 9px !important; }
+.lv-badge { width: 50px !important; height: 62px !important; }
+.lv-badge-card {
+  background: var(--pm-glass) !important;
+  border: 1.5px solid rgba(34,224,255,0.55) !important;
+  border-radius: 9px !important;
+  padding: 5px 0 0 0 !important;
+  box-shadow: var(--pm-glow-cyan), var(--pm-inner), 0 5px 12px rgba(0,0,0,0.55) !important;
+  backdrop-filter: blur(3px);
+}
+.lv-badge-card::after {         /* top glass highlight */
+  content: ""; position: absolute; top: 0; left: 8%; right: 8%; height: 42%;
+  background: linear-gradient(180deg, rgba(200,245,255,0.22), rgba(200,245,255,0));
+  border-radius: 9px 9px 40% 40%; pointer-events: none;
+}
+.lv-badge-thumb { width: 32px !important; height: 32px !important;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.7)) drop-shadow(0 0 5px rgba(34,224,255,0.4)); }
+.lv-badge-label {
+  background: linear-gradient(180deg, #063e4c, #01222c) !important;
+  color: var(--pm-cyan) !important;
+  border-top: 1px solid rgba(34,224,255,0.7) !important;
+  height: 17px !important; font-size: 10px !important; letter-spacing: 0.8px !important;
+  text-shadow: 0 0 5px rgba(34,224,255,0.7);
+}
+.lv-badge.active .lv-badge-card {
+  background: var(--pm-glass-lit) !important;
+  border-color: var(--pm-cyan) !important;
+  box-shadow: 0 0 20px rgba(34,224,255,0.85), var(--pm-inner), 0 5px 14px rgba(0,0,0,0.6) !important;
+  transform: translateX(2px) scale(1.04);
+}
+.lv-badge.active .lv-badge-label {
+  background: linear-gradient(180deg, #ffb43a, #d0600f) !important;
+  color: #201000 !important; border-top-color: #ffd873 !important;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.4);
+}
+
+/* ---------- RIGHT PANEL: gold-framed glass tube, blue fill, caps ---------- */
+.progress-bar-container { top: 46px !important; height: 250px !important; width: 30px !important; }
+.progress-percent {
+  color: #05202b !important;
+  background: var(--pm-gold-frame) !important;
+  border: 1px solid #ffe9a8 !important;
+  border-radius: 6px !important; padding: 2px 5px !important;
+  font-size: 9px !important; letter-spacing: 0.3px;
+  box-shadow: 0 0 10px rgba(255,190,60,0.6), inset 0 1px 0 rgba(255,255,255,0.5);
+  text-shadow: none !important;
+}
+.progress-tube {
+  width: 26px !important;
+  background: linear-gradient(180deg, #0a1a24 0%, #06131c 100%) !important;
+  border: 2px solid transparent !important;
+  border-radius: 13px !important;
+  padding: 5px 4px !important;
+  /* gold frame via border-image + a soft inner glass shading */
+  border-image: var(--pm-gold-frame) 1 !important;
+  box-shadow:
+    0 0 12px rgba(255,190,60,0.35),
+    inset 0 0 12px rgba(0,0,0,0.85),
+    inset 0 2px 4px rgba(0,0,0,0.6) !important;
+}
+.progress-tube::before {        /* glass vertical highlight */
+  content: ""; position: absolute; top: 6px; bottom: 6px; left: 5px; width: 5px;
+  background: linear-gradient(180deg, rgba(200,245,255,0.35), rgba(200,245,255,0.05));
+  border-radius: 4px; z-index: 6; pointer-events: none;
+}
+.progress-fill {
+  background: linear-gradient(0deg, #0077b6 0%, #00c2e8 55%, #9df3ff 100%) !important;
+  border-radius: 9px !important;
+  box-shadow: 0 0 16px rgba(0,200,240,0.85), inset 0 0 8px rgba(255,255,255,0.35) !important;
+}
+.progress-fill::after {         /* bright top cap */
+  height: 4px !important; background: #eaffff !important;
+  box-shadow: 0 0 10px #9df3ff, 0 0 4px #fff !important; border-radius: 4px;
+}
+
+/* ---------- EVENT BANNER: premium gold gradient + soft glow ------------- */
+.lucky-bag-banner {
+  border-radius: 12px !important;
+  background:
+    linear-gradient(100deg, rgba(180,40,30,0.0) 60%, rgba(255,180,60,0.25) 100%),
+    linear-gradient(90deg, #7c1d1a 0%, #a8322a 45%, #c98a2e 100%) !important;
+  border: 1.5px solid rgba(255,200,110,0.6) !important;
+  box-shadow: 0 0 16px rgba(200,120,40,0.4), inset 0 1px 0 rgba(255,220,150,0.35) !important;
+}
+
+/* ---------- TOP HEADER: profile capsule + Go button premium ------------- */
+.profile-capsule {
+  background: var(--pm-glass) !important;
+  border: 1.5px solid rgba(34,224,255,0.5) !important;
+  box-shadow: var(--pm-glow-cyan), var(--pm-inner) !important;
+  border-radius: 22px !important;
+}
+.profile-go-btn, .banner-go-btn {
+  background: linear-gradient(180deg, #ffdf8a 0%, #e0a12e 55%, #b8791a 100%) !important;
+  border: 1px solid #ffe9a8 !important;
+  color: #2a1600 !important; font-weight: 900 !important;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.55) !important;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.4) !important;
+}
+
+/* ---------- REWARD CARDS: metal corner accents + inner shadow ----------- */
+.reward-card .card-inner {
+  box-shadow: inset 0 0 14px rgba(0,0,0,0.7), inset 0 1px 0 rgba(120,220,255,0.18) !important;
+}
+.reward-card::before {          /* gold corner accent, bottom-left chamfer */
+  content: ""; position: absolute; bottom: 4px; left: 4px;
+  width: 9px; height: 9px;
+  border-bottom: 1.5px solid var(--pm-gold); border-left: 1.5px solid var(--pm-gold);
+  pointer-events: none; z-index: 3;
+}
+.reward-value {
+  background: linear-gradient(180deg, rgba(70,44,10,0.96), rgba(32,20,5,0.96)) !important;
+  border: 1px solid rgba(255,190,60,0.7) !important;
+  box-shadow: 0 0 8px rgba(255,170,30,0.3), inset 0 1px 0 rgba(255,220,140,0.35) !important;
+}
+
+/* ---------- BUTTONS: 3D depth, gradient, inner + outer glow ------------- */
+.btn-action-primary {
+  background:
+    linear-gradient(180deg, #a6f2ff 0%, #22c8e8 45%, #0088b3 100%) !important;
+  background-size: 100% 100% !important;
+  box-shadow:
+    0 4px 0 #045c78, 0 6px 14px rgba(0,0,0,0.55),
+    0 0 22px rgba(34,224,255,0.5), inset 0 2px 0 rgba(255,255,255,0.6) !important;
+  color: #032430 !important;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.55) !important;
+}
+.btn-action-primary:active { transform: translateY(3px) !important;
+  box-shadow: 0 1px 0 #045c78, 0 2px 8px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.5) !important; }
+.btn-action-sub {
+  box-shadow: 0 3px 0 #063a4a, 0 5px 10px rgba(0,0,0,0.45), 0 0 12px rgba(34,224,255,0.3) !important;
+}
+.btn-action-sub:active { transform: translateY(2px) !important; }
+
+/* ---------- TYPOGRAPHY: consistent premium tracking -------------------- */
+.rewards-section-title span, .tab-item, .btn-action-primary, .btn-action-sub,
+.lv-badge-label, .countdown-label {
+  letter-spacing: 0.8px !important;
+}
 
 
 

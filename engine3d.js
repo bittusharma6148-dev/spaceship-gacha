@@ -742,13 +742,16 @@ class GachaEngine {
     grp.position.y = -4.55;
     grp.scale.setScalar(1.0);      // full size — it reads as a launch platform now
 
-    // Dark machined alloy rather than grey rock: this is a launch pad, and the
-    // dark base is what lets the emissive channels actually glow.
-    const deck = new THREE.MeshStandardMaterial({
-      color: 0x2b3442, metalness: 0.75, roughness: 0.42
+    // Polished machined alloy — clearcoat gives the sharp specular highlights
+    // and a faint blue emissive keeps the metal reading "powered", like the ref.
+    const deck = new THREE.MeshPhysicalMaterial({
+      color: 0x2f3a4c, metalness: 0.9, roughness: 0.28,
+      clearcoat: 0.8, clearcoatRoughness: 0.25,
+      emissive: 0x06212e, emissiveIntensity: 0.5, envMapIntensity: 1.3
     });
-    const deckDark = new THREE.MeshStandardMaterial({
-      color: 0x151b26, metalness: 0.7, roughness: 0.55
+    const deckDark = new THREE.MeshPhysicalMaterial({
+      color: 0x141d2a, metalness: 0.85, roughness: 0.4,
+      clearcoat: 0.6, emissive: 0x04141d, emissiveIntensity: 0.5, envMapIntensity: 1.1
     });
     const trimLit = new THREE.MeshBasicMaterial({ color: 0x00d5ff });
     this.padTrim = trimLit;
@@ -839,16 +842,33 @@ class GachaEngine {
     grp.add(well);
     this.disposables.push(well.geometry, well.material);
 
-    // concentric inset tech rings machined into the deck top
-    for (let i = 0; i < 3; i++) {
-      const rr = 1.9 + i * 0.22;
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(rr, 0.05, 6, 80), deckDark
+    // concentric machined tech rings on the deck top — more of them, alternating
+    // metal ridges with thin glowing cyan channels for depth and realism
+    const glowRingMat = new THREE.MeshBasicMaterial({
+      color: 0x00c8ff, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    this.padGlowRings = glowRingMat;
+    this.disposables.push(glowRingMat);
+    for (let i = 0; i < 5; i++) {
+      const rr = 1.78 + i * 0.19;
+      const metalRing = new THREE.Mesh(
+        new THREE.TorusGeometry(rr, 0.055, 8, 96), deckDark
       );
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.y = 0.3;
-      grp.add(ring);
-      this.disposables.push(ring.geometry);
+      metalRing.rotation.x = -Math.PI / 2;
+      metalRing.position.y = 0.3;
+      metalRing.castShadow = true;
+      grp.add(metalRing);
+      this.disposables.push(metalRing.geometry);
+
+      // thin recessed glow channel just inside each metal ridge
+      const glowCh = new THREE.Mesh(
+        new THREE.TorusGeometry(rr - 0.09, 0.018, 6, 96), glowRingMat
+      );
+      glowCh.rotation.x = -Math.PI / 2;
+      glowCh.position.y = 0.285;
+      grp.add(glowCh);
+      this.disposables.push(glowCh.geometry);
     }
 
     // THE VORTEX — swirling orange energy core, animated in the loop
@@ -1339,18 +1359,50 @@ class GachaEngine {
     const box = new THREE.Box3().setFromObject(this.rocket);
     box.expandByPoint(new THREE.Vector3(0, this.pedestal.position.y + 0.2, 0));
 
-    const height = Math.max(box.max.y - box.min.y, 0.001);
+    const worldH = Math.max(box.max.y - box.min.y, 0.001);
+    const worldW = Math.max(box.max.x - box.min.x, 0.001);
     const centre = (box.max.y + box.min.y) / 2;
 
-    const viewH = height / FRAME_FILL;
+    const cw = this.container.clientWidth || 390;
+    const ch = this.container.clientHeight || 844;
+
+    // DOM-AWARE BAND: read where the banner ends and the reward panel begins,
+    // in canvas pixels. The ship must live between them on ANY phone — banner
+    // and panel have fixed pixel heights, so their FRACTION grows on short
+    // (browser-chrome-heavy) viewports; a fixed fraction would push the nose
+    // into the banner. Measuring the real gap keeps it clear everywhere.
+    let topPx = ch * 0.12, botPx = ch * 0.74;
+    try {
+      const cvs = this.renderer.domElement.getBoundingClientRect();
+      const banner = document.querySelector('.lucky-bag-banner');
+      const reward = document.querySelector('.rewards-section');
+      if (banner) topPx = banner.getBoundingClientRect().bottom - cvs.top;
+      if (reward) botPx = reward.getBoundingClientRect().top - cvs.top;
+    } catch (_) {}
+    // breathing margins so the nose/base never kiss the chrome
+    topPx += ch * 0.035;
+    botPx -= ch * 0.015;
+    const bandH = Math.max(botPx - topPx, 10);
+    const centreFrac = ((topPx + botPx) / 2) / ch;
+
+    // Fit the assembly to the band by HEIGHT…
+    let fillFrac = bandH / ch;
+    let viewH = worldH / fillFrac;
     const halfFov = THREE.MathUtils.degToRad(this.camera.fov) / 2;
+    const aspect = cw / ch;
+
+    // …but cap by WIDTH so the wings never reach the level badges on the left.
+    // Keep the ship within the central corridor (badges sit in the outer ~18%).
+    const maxWidthFrac = 0.64;
+    const viewW = viewH * aspect;                 // world units across the view
+    const wFrac = worldW / viewW;
+    if (wFrac > maxWidthFrac) viewH *= wFrac / maxWidthFrac;  // pull back
 
     this.camZ = viewH / (2 * Math.tan(halfFov));
-    // put the box centre at FRAME_CENTRE down the screen instead of dead middle
-    this.aimY = centre - (0.5 - FRAME_CENTRE) * viewH;
+    this.aimY = centre - (0.5 - centreFrac) * viewH;
 
-    // Lift the camera and aim down at the assembly so the deck top and its
-    // vortex read as an ellipse (the reference's 3/4 hero angle), not edge-on.
+    // Lift the camera and aim down so the deck + vortex read as an ellipse
+    // (the reference's 3/4 hero angle), not edge-on.
     this.camY = this.aimY + this.camZ * Math.tan(CAM_PITCH);
 
     this.camera.position.set(0, this.camY, this.camZ);
