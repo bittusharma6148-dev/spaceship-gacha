@@ -400,15 +400,31 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  /* Teal party sky with gold balloons — matches the reference client. */
+  /* Fallback only — the real sky is scene.background inside the WebGL pass,
+     because the composer writes an opaque frame over this layer. */
   background-image:
-    linear-gradient(180deg, rgba(6, 32, 36, 0.30) 0%, rgba(4, 20, 24, 0.70) 100%),
-    url('assets/bg_space_balloons.png');
+    linear-gradient(180deg, rgba(6, 20, 30, 0.35) 0%, rgba(3, 10, 18, 0.75) 100%),
+    url('assets/bg_deep_space.png');
   background-size: cover;
-  background-position: center 28%;
+  background-position: center;
   z-index: 0;
   pointer-events: none;
   opacity: 1;
+}
+
+/* Vignette over the WebGL frame: darkens the nebula at the edges and behind
+   the ship so the hull keeps its contrast, and adds the usual game-HUD falloff.
+   Sits above the canvas (z 2) but below every control. */
+.stage-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 62% 42% at 50% 38%,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(2, 8, 16, 0.30) 55%,
+      rgba(1, 5, 11, 0.72) 100%);
 }
 
 /* REAL 3D STAGE — hosts the WebGL canvas (ship, pedestal, flames, starfield).
@@ -2831,32 +2847,111 @@ model-viewer {
   text-shadow: 0 0 5px rgba(0,229,255,0.4);
 }
 
-/* Reward cards */
+/* ============================ GAMING REWARD PANEL ============================
+   Plain rounded boxes read as a form, not a game. These are chamfered alloy
+   frames: a clipped gradient edge, a darker clipped face inside it, corner
+   ticks, and a gold data pill for the value. */
+
 .reward-card {
-  border: 1.2px solid rgba(0, 229, 255, 0.4) !important;
-  border-radius: 6px !important;
-  background: rgba(5, 15, 20, 0.8) !important;
-  box-shadow: inset 0 0 8px rgba(0, 229, 255, 0.1) !important;
+  --chamfer: 9px;
+  position: relative !important;
+  padding: 1.5px !important;                 /* becomes the frame thickness */
+  border: 0 !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+  background: linear-gradient(160deg,
+      rgba(0, 229, 255, 0.85) 0%,
+      rgba(0, 130, 175, 0.5) 45%,
+      rgba(0, 229, 255, 0.7) 100%) !important;
+  clip-path: polygon(
+    var(--chamfer) 0, 100% 0,
+    100% calc(100% - var(--chamfer)), calc(100% - var(--chamfer)) 100%,
+    0 100%, 0 var(--chamfer));
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.18) !important;
+  transition: filter 0.18s ease, transform 0.18s ease;
+}
+
+.reward-card .card-inner {
+  --chamfer: 8px;
+  height: 100%;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(0, 229, 255, 0.16) 0%, rgba(0,0,0,0) 62%),
+    linear-gradient(180deg, #0b2230 0%, #061520 55%, #04101a 100%);
+  clip-path: polygon(
+    var(--chamfer) 0, 100% 0,
+    100% calc(100% - var(--chamfer)), calc(100% - var(--chamfer)) 100%,
+    0 100%, 0 var(--chamfer));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* scanline sheen across the face */
+.reward-card .card-inner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    180deg, rgba(255,255,255,0.035) 0 1px, rgba(255,255,255,0) 1px 4px);
+  pointer-events: none;
+}
+
+/* bracket tick in the square corner */
+.reward-card::after {
+  content: "";
+  position: absolute;
+  top: 5px; right: 5px;
+  width: 9px; height: 9px;
+  border-top: 1.5px solid rgba(0, 229, 255, 0.9);
+  border-right: 1.5px solid rgba(0, 229, 255, 0.9);
+  pointer-events: none;
 }
 
 .reward-card:hover {
-  border-color: #00e5ff !important;
-  box-shadow: 0 0 10px rgba(0, 229, 255, 0.35) !important;
+  filter: brightness(1.18) !important;
+  transform: translateY(-2px);
 }
 
+.reward-card.winner-glow {
+  background: linear-gradient(160deg, #ffd24a 0%, #ff9100 55%, #ffd24a 100%) !important;
+  box-shadow: 0 0 22px rgba(255, 176, 32, 0.75) !important;
+}
+
+/* value shown as a gold data pill, not loose text */
 .reward-value {
-  color: rgba(255, 255, 255, 0.95) !important;
-  font-weight: bold !important;
-  font-size: 11px !important;
-  margin-top: 4px !important;
+  display: inline-block;
+  margin-top: 6px !important;
+  padding: 2px 9px !important;
+  font-family: var(--f-mono, monospace) !important;
+  font-weight: 800 !important;
+  font-size: 10.5px !important;
+  letter-spacing: 0.4px;
+  color: #ffd98a !important;
+  background: linear-gradient(180deg, rgba(60, 38, 8, 0.95), rgba(28, 18, 4, 0.95)) !important;
+  border: 1px solid rgba(255, 178, 44, 0.55);
+  border-radius: 999px;
+  box-shadow: 0 0 8px rgba(255, 170, 30, 0.2), inset 0 1px 0 rgba(255, 214, 140, 0.25);
 }
 
+/* possibility ribbon, seated on the card's top edge instead of floating off it */
 .chance-tag {
-  background: linear-gradient(135deg, #ff9100 0%, #ff3d00 100%) !important;
-  border-radius: 4px !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 3;
+  padding: 2px 4px !important;
+  font-family: var(--f-display) !important;
   font-size: 8px !important;
-  padding: 1px 4px !important;
-  top: -6px !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.6px;
+  text-align: center;
+  text-transform: uppercase;
+  color: #2b1400 !important;
+  background: linear-gradient(180deg, #ffd24a 0%, #ff9a10 55%, #ff6a00 100%) !important;
+  border-radius: 0 !important;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 6px 100%, 0 calc(100% - 5px));
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 /* Bottom Actions Footers - Both styled as premium cyan buttons */
@@ -2868,22 +2963,42 @@ model-viewer {
 }
 
 .btn-action-primary {
+  --chamfer: 12px;
+  position: relative;
   width: 100% !important;
-  height: 44px !important;
-  background: linear-gradient(135deg, #00e5ff 0%, #0097a7 50%, #00e5ff 100%) !important;
-  background-size: 200% auto !important;
+  height: 46px !important;
+  background: linear-gradient(135deg, #7df4ff 0%, #00c2e0 38%, #0086a8 62%, #7df4ff 100%) !important;
+  background-size: 220% auto !important;
   animation: btnShimmer 3s linear infinite !important;
-  border: 1.5px solid #ffffff !important;
-  border-radius: 6px !important;
-  box-shadow: 0 0 20px rgba(0, 229, 255, 0.7), inset 0 0 10px rgba(255, 255, 255, 0.5) !important;
-  color: #051622 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  /* angled cut corners — the single biggest cue that this is a game button */
+  clip-path: polygon(
+    var(--chamfer) 0, calc(100% - var(--chamfer)) 0, 100% var(--chamfer),
+    100% calc(100% - var(--chamfer)), calc(100% - var(--chamfer)) 100%,
+    var(--chamfer) 100%, 0 calc(100% - var(--chamfer)), 0 var(--chamfer));
+  box-shadow: 0 0 24px rgba(0, 229, 255, 0.6) !important;
+  color: #04202b !important;
   font-family: var(--f-display) !important;
   font-weight: 950 !important;
   font-size: 14px !important;
-  letter-spacing: 1.5px !important;
+  letter-spacing: 1.6px !important;
   text-transform: uppercase !important;
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8) !important;
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) !important;
+  transition: filter 0.18s ease, transform 0.18s ease !important;
+}
+
+/* inner keyline, following the same chamfer */
+.btn-action-primary::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  clip-path: polygon(
+    10px 0, calc(100% - 10px) 0, 100% 10px,
+    100% calc(100% - 10px), calc(100% - 10px) 100%,
+    10px 100%, 0 calc(100% - 10px), 0 10px);
+  pointer-events: none;
 }
 
 @keyframes btnShimmer {
@@ -2893,30 +3008,52 @@ model-viewer {
 }
 
 .btn-action-primary:hover {
-  transform: translateY(-2px) scale(1.01) !important;
-  box-shadow: 0 0 30px rgba(0, 229, 255, 0.95), inset 0 0 15px #ffffff !important;
-  color: #000 !important;
+  transform: translateY(-2px) !important;
+  filter: brightness(1.12) !important;
 }
 
 .btn-action-sub {
+  --chamfer: 10px;
+  position: relative;
   width: 100% !important;
   height: 38px !important;
-  background: rgba(10, 28, 36, 0.7) !important;
-  border: 1.5px solid #00e5ff !important;
-  border-radius: 6px !important;
-  color: #00e5ff !important;
-  font-weight: 800 !important;
+  padding: 1.5px !important;
+  background: linear-gradient(135deg,
+      rgba(0, 229, 255, 0.75), rgba(0, 120, 160, 0.45), rgba(0, 229, 255, 0.75)) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  clip-path: polygon(
+    var(--chamfer) 0, calc(100% - var(--chamfer)) 0, 100% var(--chamfer),
+    100% calc(100% - var(--chamfer)), calc(100% - var(--chamfer)) 100%,
+    var(--chamfer) 100%, 0 calc(100% - var(--chamfer)), 0 var(--chamfer));
+  color: #7df4ff !important;
+  font-family: var(--f-display) !important;
+  font-weight: 900 !important;
   font-size: 12px !important;
-  letter-spacing: 0.5px !important;
-  box-shadow: 0 2px 8px rgba(0, 229, 255, 0.15) !important;
+  letter-spacing: 1.6px !important;
+  text-transform: uppercase;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: filter 0.18s ease, transform 0.18s ease;
+}
+
+/* dark face inside the clipped frame */
+.btn-action-sub::before {
+  content: "";
+  position: absolute;
+  inset: 1.5px;
+  background: linear-gradient(180deg, #08202c 0%, #04131c 100%);
+  clip-path: polygon(
+    9px 0, calc(100% - 9px) 0, 100% 9px,
+    100% calc(100% - 9px), calc(100% - 9px) 100%,
+    9px 100%, 0 calc(100% - 9px), 0 9px);
+  z-index: -1;
 }
 
 .btn-action-sub:hover {
-  background: rgba(0, 229, 255, 0.15) !important;
-  box-shadow: 0 4px 12px rgba(0, 229, 255, 0.3) !important;
+  filter: brightness(1.25) !important;
+  transform: translateY(-1px);
 }
 
 /* Fix Battlefield positioning */

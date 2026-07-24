@@ -188,14 +188,14 @@ const FLAME_FRAG = /* glsl */`
     radial = smoothstep(0.0, 0.55, radial);
 
     float a = clamp(ragged * radial, 0.0, 1.0);
-    a *= (0.22 + uThrottle * 0.55) * uGain;
+    a *= (0.12 + uThrottle * 0.5) * uGain;
     if (a < 0.01) discard;
 
     // white-hot at the throat, level colour further out
     float heat = smoothstep(0.5, 0.0, y) * 0.85 + uThrottle * 0.15;
     vec3 col = mix(uEdge, uCore, clamp(heat, 0.0, 1.0));
     // a restrained hot core: enough to catch bloom, not enough to blow the hull out
-    col += uCore * pow(1.0 - y, 6.0) * (0.25 + uThrottle * 0.45);
+    col += uCore * pow(1.0 - y, 7.0) * (0.14 + uThrottle * 0.4);
 
     gl_FragColor = vec4(col, a);
   }
@@ -260,6 +260,7 @@ class GachaEngine {
     this._initScene();
     this._initLights();
     this._initStars();
+    this._initCosmos();
     this._initPedestal();
     this._initComposer();
 
@@ -312,10 +313,13 @@ class GachaEngine {
 
     // The composer writes an opaque frame, so anything behind the canvas in CSS
     // is invisible. The sky has to live inside the 3D scene to be seen at all.
-    new THREE.TextureLoader().load('assets/bg_space_balloons.png', (tex) => {
+    // Cyan/gold nebula — same palette as the hull and trim, so the ship reads
+    // as part of the scene instead of pasted onto it.
+    new THREE.TextureLoader().load('assets/bg_deep_space.png', (tex) => {
       tex.colorSpace = THREE.SRGBColorSpace;
       this.scene.background = tex;
-      this.scene.backgroundIntensity = 0.62;   // sit it behind the ship
+      // Held down so the nebula's bright core never competes with the ship.
+      this.scene.backgroundIntensity = 0.4;
       this.disposables.push(tex);
     });
 
@@ -330,7 +334,7 @@ class GachaEngine {
 
   _initLights() {
     // Key — warm, upper-left, casts the shadow onto the pedestal
-    this.key = new THREE.DirectionalLight(0xfff0dd, 2.6);
+    this.key = new THREE.DirectionalLight(0xfff0dd, 3.4);
     this.key.position.set(-5, 7, 6);
     this.key.castShadow = true;
     this.key.shadow.mapSize.set(1024, 1024);
@@ -364,7 +368,7 @@ class GachaEngine {
   /* ------------------------------------------------------- 3D star field */
 
   _initStars() {
-    const COUNT = 520;
+    const COUNT = 900;
     const pos = new Float32Array(COUNT * 3);
     const size = new Float32Array(COUNT);
     const seed = new Float32Array(COUNT);
@@ -402,6 +406,202 @@ class GachaEngine {
     this.disposables.push(g, m);
   }
 
+  /* ------------------------------------------------------- deep-space props */
+
+  /** Banded gas-giant texture, drawn procedurally so no extra asset ships. */
+  _planetTexture(bands, seed = 1) {
+    const c = document.createElement('canvas');
+    c.width = 512; c.height = 256;
+    const x = c.getContext('2d');
+
+    const grad = x.createLinearGradient(0, 0, 0, 256);
+    bands.forEach((col, i) => grad.addColorStop(i / (bands.length - 1), col));
+    x.fillStyle = grad;
+    x.fillRect(0, 0, 512, 256);
+
+    // wobbling latitude bands + a few storm ovals
+    let s = seed;
+    const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < 46; i++) {
+      const y = rnd() * 256;
+      const h = 2 + rnd() * 12;
+      x.globalAlpha = 0.05 + rnd() * 0.16;
+      x.fillStyle = rnd() > 0.5 ? '#ffffff' : '#000000';
+      x.beginPath();
+      for (let px = 0; px <= 512; px += 8) {
+        const wob = Math.sin(px * 0.02 + i) * 3;
+        px === 0 ? x.moveTo(px, y + wob) : x.lineTo(px, y + wob);
+      }
+      for (let px = 512; px >= 0; px -= 8) {
+        const wob = Math.sin(px * 0.02 + i) * 3;
+        x.lineTo(px, y + h + wob);
+      }
+      x.closePath();
+      x.fill();
+    }
+    for (let i = 0; i < 5; i++) {
+      x.globalAlpha = 0.12 + rnd() * 0.18;
+      x.fillStyle = rnd() > 0.5 ? '#ffe6c0' : '#5a2f1a';
+      x.beginPath();
+      x.ellipse(rnd() * 512, rnd() * 256, 10 + rnd() * 30, 5 + rnd() * 10, 0, 0, Math.PI * 2);
+      x.fill();
+    }
+    x.globalAlpha = 1;
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    this.disposables.push(tex);
+    return tex;
+  }
+
+  _addPlanet({ radius, position, bands, seed, ring, tilt = 0.3 }) {
+    const grp = new THREE.Group();
+    grp.position.set(...position);
+    grp.rotation.z = tilt;
+
+    const mat = new THREE.MeshStandardMaterial({
+      map: this._planetTexture(bands, seed),
+      roughness: 0.92,
+      metalness: 0.0
+    });
+    const globe = new THREE.Mesh(new THREE.SphereGeometry(radius, 48, 32), mat);
+    grp.add(globe);
+    this.disposables.push(globe.geometry, mat);
+
+    if (ring) {
+      const rg = new THREE.RingGeometry(radius * 1.35, radius * 2.15, 96);
+      // remap UVs so the gradient runs across the ring's width
+      const pos = rg.attributes.position;
+      const uv = rg.attributes.uv;
+      const v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i);
+        const d = (v.length() - radius * 1.35) / (radius * 0.8);
+        uv.setXY(i, d, d);
+      }
+      const rm = new THREE.MeshBasicMaterial({
+        color: ring,
+        transparent: true,
+        opacity: 0.34,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+      const rmesh = new THREE.Mesh(rg, rm);
+      rmesh.rotation.x = Math.PI / 2 - 0.34;
+      grp.add(rmesh);
+      this.disposables.push(rg, rm);
+    }
+
+    this.scene.add(grp);
+    return grp;
+  }
+
+  /** Spiral galaxy as a point cloud — warm core fading to cool arms. */
+  _addGalaxy({ position, radius, count, arms, spin, coreColor, armColor, scale }) {
+    const pos = new Float32Array(count * 3);
+    const col = new Float32Array(count * 3);
+    const siz = new Float32Array(count);
+
+    const cCore = new THREE.Color(coreColor);
+    const cArm = new THREE.Color(armColor);
+    const tmp = new THREE.Color();
+
+    for (let i = 0; i < count; i++) {
+      // bias toward the core so it reads as a bulge, not a flat ring
+      const r = Math.pow(Math.random(), 1.9) * radius;
+      const branch = ((i % arms) / arms) * Math.PI * 2;
+      const angle = branch + (r / radius) * spin;
+
+      // scatter widens with radius; thickness stays thin -> disc
+      const spread = 0.09 * r + 0.25;
+      const sx = (Math.random() - 0.5) * spread;
+      const sy = (Math.random() - 0.5) * spread * 0.28;
+      const sz = (Math.random() - 0.5) * spread;
+
+      pos[i * 3] = Math.cos(angle) * r + sx;
+      pos[i * 3 + 1] = sy;
+      pos[i * 3 + 2] = Math.sin(angle) * r + sz;
+
+      tmp.copy(cCore).lerp(cArm, Math.min(r / radius, 1));
+      col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+      siz[i] = Math.random() * 1.6 + 0.5;
+    }
+
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aSize', new THREE.BufferAttribute(siz, 1));
+
+    const m = new THREE.ShaderMaterial({
+      uniforms: { uScale: { value: scale } },
+      vertexShader: /* glsl */`
+        attribute float aSize;
+        uniform float uScale;
+        varying vec3 vCol;
+        void main() {
+          vCol = color;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = aSize * uScale * (300.0 / -mv.z);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */`
+        varying vec3 vCol;
+        void main() {
+          float d = length(gl_PointCoord - 0.5);
+          float a = smoothstep(0.5, 0.0, d);
+          if (a < 0.01) discard;
+          gl_FragColor = vec4(vCol, a * 0.85);
+        }`,
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    const pts = new THREE.Points(g, m);
+    pts.position.set(...position);
+    pts.rotation.set(-1.16, 0, 0.32);   // tilted, so we see the spiral face-on-ish
+    this.scene.add(pts);
+    this.disposables.push(g, m);
+    return pts;
+  }
+
+  _initCosmos() {
+    // Everything here lives far behind the stage and is deliberately dim —
+    // it must add depth without ever competing with the ship.
+    this.galaxy = this._addGalaxy({
+      position: [-34, 30, -165],
+      radius: 34, count: 13000, arms: 4, spin: 4.1,
+      coreColor: 0xffe2b0, armColor: 0x4f8dff, scale: 1.75
+    });
+
+    this.planetA = this._addPlanet({
+      radius: 5.2,
+      position: [30, 20, -125],
+      bands: ['#c9a06a', '#e8cf9e', '#a8763f', '#e0bd85', '#8a5c33'],
+      seed: 7,
+      ring: 0xffcf9a,
+      tilt: 0.22
+    });
+
+    this.planetB = this._addPlanet({
+      radius: 3.0,
+      position: [-27, -12, -100],
+      bands: ['#2f6f9e', '#57a8c9', '#1d4b73', '#6fc3d8'],
+      seed: 23,
+      tilt: -0.4
+    });
+
+    // a small close moon for parallax scale
+    this.moon = this._addPlanet({
+      radius: 1.1,
+      position: [20, -16, -66],
+      bands: ['#8d95a4', '#c3c9d4', '#6a7180'],
+      seed: 51,
+      tilt: 0.1
+    });
+  }
+
   /* ------------------------------------------------------- stone pedestal */
 
   _initPedestal() {
@@ -409,46 +609,86 @@ class GachaEngine {
     // Dropped below the nozzles so the exhaust plume is visible in the gap —
     // with the pad any higher it just depth-occludes the flames, any lower and
     // it falls out of the stage band behind the countdown row.
-    grp.position.y = -4.25;
-    grp.scale.setScalar(0.72);
+    grp.position.y = -4.55;
+    grp.scale.setScalar(1.0);      // full size — it reads as a launch platform now
 
-    const stone = new THREE.MeshStandardMaterial({
-      color: 0x39424f,
-      metalness: 0.15,
-      roughness: 0.85
+    // Dark machined alloy rather than grey rock: this is a launch pad, and the
+    // dark base is what lets the emissive channels actually glow.
+    const deck = new THREE.MeshStandardMaterial({
+      color: 0x2b3442, metalness: 0.75, roughness: 0.42
     });
-    const stoneDark = new THREE.MeshStandardMaterial({
-      color: 0x222a35,
-      metalness: 0.2,
-      roughness: 0.75
+    const deckDark = new THREE.MeshStandardMaterial({
+      color: 0x151b26, metalness: 0.7, roughness: 0.55
     });
+    const trimLit = new THREE.MeshBasicMaterial({ color: 0x00d5ff });
+    this.padTrim = trimLit;
 
-    // stepped plinth
-    const top = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.2, 0.34, 48), stone);
-    top.position.y = 0;
-    top.receiveShadow = true;
-    top.castShadow = true;
+    // stepped platform
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(2.35, 2.5, 0.55, 64), deck);
+    top.receiveShadow = true; top.castShadow = true;
     grp.add(top);
 
-    const mid = new THREE.Mesh(new THREE.CylinderGeometry(2.32, 2.5, 0.3, 48), stoneDark);
-    mid.position.y = -0.32;
+    const mid = new THREE.Mesh(new THREE.CylinderGeometry(2.74, 2.92, 0.5, 64), deckDark);
+    mid.position.y = -0.52;
     mid.receiveShadow = true;
     grp.add(mid);
 
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(2.55, 2.75, 0.26, 48), stone);
-    base.position.y = -0.62;
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(3.06, 3.32, 0.45, 64), deck);
+    base.position.y = -1.0;
     base.receiveShadow = true;
     grp.add(base);
 
-    // radial notches around the rim — reads as carved stone under raking light
-    const notchGeo = new THREE.BoxGeometry(0.16, 0.36, 0.3);
-    for (let i = 0; i < 24; i++) {
-      const a = (i / 24) * Math.PI * 2;
-      const n = new THREE.Mesh(notchGeo, stoneDark);
-      n.position.set(Math.cos(a) * 2.18, -0.02, Math.sin(a) * 2.18);
-      n.rotation.y = -a;
-      n.castShadow = true;
-      grp.add(n);
+    // glowing rim strip sandwiched between the tiers — the main "tech" read
+    const rimStrip = new THREE.Mesh(
+      new THREE.CylinderGeometry(2.54, 2.54, 0.1, 64, 1, true), trimLit
+    );
+    rimStrip.position.y = -0.26;
+    grp.add(rimStrip);
+
+    const rimStrip2 = new THREE.Mesh(
+      new THREE.CylinderGeometry(2.96, 2.96, 0.085, 64, 1, true), trimLit
+    );
+    rimStrip2.position.y = -0.76;
+    grp.add(rimStrip2);
+
+    // armoured buttress blocks with lit gaps between them
+    const blockGeo = new THREE.BoxGeometry(0.46, 0.72, 0.55);
+    const gapGeo = new THREE.BoxGeometry(0.12, 0.56, 0.57);
+    this.disposables.push(blockGeo, gapGeo);
+    const N = 16;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const b = new THREE.Mesh(blockGeo, deckDark);
+      b.position.set(Math.cos(a) * 2.58, -0.1, Math.sin(a) * 2.58);
+      b.rotation.y = -a;
+      b.castShadow = true;
+      grp.add(b);
+
+      const ga = ((i + 0.5) / N) * Math.PI * 2;
+      const gmesh = new THREE.Mesh(gapGeo, trimLit);
+      gmesh.position.set(Math.cos(ga) * 2.58, -0.1, Math.sin(ga) * 2.58);
+      gmesh.rotation.y = -ga;
+      grp.add(gmesh);
+    }
+
+    // four heavy clamp arms at the cardinals
+    const armGeo = new THREE.BoxGeometry(0.26, 0.78, 0.5);
+    this.disposables.push(armGeo);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const arm = new THREE.Mesh(armGeo, deck);
+      arm.position.set(Math.cos(a) * 2.24, 0.5, Math.sin(a) * 2.24);
+      arm.rotation.y = -a;
+      arm.rotation.z = Math.cos(a) * 0.18;
+      arm.castShadow = true;
+      grp.add(arm);
+
+      const tip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.24, 0.07, 0.46), trimLit
+      );
+      tip.position.set(Math.cos(a) * 2.24, 0.92, Math.sin(a) * 2.24);
+      tip.rotation.y = -a;
+      grp.add(tip);
     }
 
     // Emissive launch-deck glow. Warm gold, not the level colour — in the
@@ -460,28 +700,28 @@ class GachaEngine {
       blending: THREE.AdditiveBlending,
       depthWrite: false
     });
-    const pad = new THREE.Mesh(new THREE.CircleGeometry(1.85, 48), this.padMat);
+    const pad = new THREE.Mesh(new THREE.CircleGeometry(2.15, 48), this.padMat);
     pad.rotation.x = -Math.PI / 2;
-    pad.position.y = 0.18;
+    pad.position.y = 0.29;
     grp.add(pad);
 
     // counter-rotating tech rings
     this.ringA = new THREE.Mesh(
-      new THREE.TorusGeometry(2.05, 0.035, 8, 96),
+      new THREE.TorusGeometry(2.42, 0.05, 8, 96),
       new THREE.MeshBasicMaterial({ color: 0x00d5ff, transparent: true, opacity: 0.9,
         blending: THREE.AdditiveBlending, depthWrite: false })
     );
     this.ringA.rotation.x = -Math.PI / 2;
-    this.ringA.position.y = 0.22;
+    this.ringA.position.y = 0.34;
     grp.add(this.ringA);
 
     this.ringB = new THREE.Mesh(
-      new THREE.TorusGeometry(1.55, 0.022, 8, 72),
+      new THREE.TorusGeometry(1.85, 0.032, 8, 72),
       new THREE.MeshBasicMaterial({ color: 0x00d5ff, transparent: true, opacity: 0.6,
         blending: THREE.AdditiveBlending, depthWrite: false })
     );
     this.ringB.rotation.x = -Math.PI / 2;
-    this.ringB.position.y = 0.30;
+    this.ringB.position.y = 0.44;
     grp.add(this.ringB);
 
     this.pedestal = grp;
@@ -492,7 +732,7 @@ class GachaEngine {
       color: 0x00d5ff, transparent: true, opacity: 0,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
     });
-    this.shock = new THREE.Mesh(new THREE.RingGeometry(1.6, 2.0, 64), this.shockMat);
+    this.shock = new THREE.Mesh(new THREE.RingGeometry(2.1, 2.6, 64), this.shockMat);
     this.shock.rotation.x = -Math.PI / 2;
     this.shock.position.set(0, -3.1, 0);
     this.shock.visible = false;
@@ -514,7 +754,7 @@ class GachaEngine {
     // The single biggest "AAA" lever: physically-plausible glow bleed.
     // Threshold is deliberately high — only genuinely hot pixels (throats,
     // energy pad, warp streaks) bloom, so the hull keeps its PBR detail.
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.42, 0.42, 0.72);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.34, 0.3, 0.78);
     this.composer.addPass(this.bloom);
 
     this.composer.addPass(new OutputPass());
@@ -1001,6 +1241,7 @@ class GachaEngine {
     this.rim.color.copy(c);
     this.engineLight.color.copy(new THREE.Color(spec.flameEdge));
     this.ringA.material.color.copy(c);
+    this.padTrim.color.copy(c);
     this.ringB.material.color.copy(c);
     this.shockMat.color.copy(c);
     this.starUniforms.uColor.value.copy(c);
@@ -1132,13 +1373,19 @@ class GachaEngine {
     }
 
     // ---- engine light pulses with throttle
-    this.engineLight.intensity = 2.2 + this.throttle * 14 + Math.sin(t * 26) * 0.7;
+    this.engineLight.intensity = 1.6 + this.throttle * 12 + Math.sin(t * 26) * 0.7;
     if (this.shipRoot) this.engineLight.position.y = this.shipRoot.position.y - 2.6;
+
+    // ---- deep-space props drift, very slowly
+    if (this.galaxy) this.galaxy.rotation.z += dt * 0.012;
+    if (this.planetA) this.planetA.rotation.y += dt * 0.018;
+    if (this.planetB) this.planetB.rotation.y += dt * 0.03;
+    if (this.moon) this.moon.rotation.y += dt * 0.05;
 
     // ---- pedestal
     this.ringA.rotation.z += dt * 0.55;
     this.ringB.rotation.z -= dt * 0.9;
-    this.padMat.opacity = 0.16 + this.throttle * 0.22 + Math.sin(t * 4) * 0.03;
+    this.padMat.opacity = 0.09 + this.throttle * 0.2 + Math.sin(t * 4) * 0.03;
     this.pedestal.visible = !(this.isLaunching && this._launchT > this._launchDur * 0.75);
 
     // ---- shockwave
@@ -1183,7 +1430,7 @@ class GachaEngine {
     }
 
     // ---- bloom swells with throttle so launches feel hot
-    this.bloom.strength = 0.38 + this.throttle * 0.42 + this.warp * 0.35;
+    this.bloom.strength = 0.3 + this.throttle * 0.38 + this.warp * 0.35;
 
     this.composer.render();
   }
