@@ -18,7 +18,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 // stage band — above the countdown row, below the event banner. _frameCamera()
 // auto-fits whatever was just built, so these describe the TARGET: the assembly
 // fills this fraction of the view, centred this far down the screen.
-const FRAME_FILL = 0.44;
+const FRAME_FILL = 0.48;
 const FRAME_CENTRE = 0.40;
 
 // Where the barrel hands off to the nose cone, as a fraction of hull radius.
@@ -114,19 +114,19 @@ const SHIPS = {
     flameCore: 0xbfeaff,
     flameEdge: 0x1e7bff,
     hull: 0x1a6ad8,          // the reference's bright royal blue
-    nose: 0x8fdcf5,          // pale cyan nose cap
-    body: 3.7,
-    radius: 0.66,
-    noseLen: 1.2,
+    nose: 0xaef0ff,          // bright cyan nose cap (reference glow)
+    body: 3.8,
+    radius: 0.78,
+    noseLen: 1.25,
     wings: 4,
-    wingSpan: 1.28,
-    wingDrop: 1.4,
+    wingSpan: 1.4,
+    wingDrop: 1.5,
     boosters: 2,
-    boosterScale: 0.58,
+    boosterScale: 0.6,
     engines: [
-      { x: 0, z: 0, r: 0.38 },
-      { x: -0.60, z: 0, r: 0.25 },
-      { x: 0.60, z: 0, r: 0.25 }
+      { x: 0, z: 0, r: 0.4 },
+      { x: -0.66, z: 0, r: 0.26 },
+      { x: 0.66, z: 0, r: 0.26 }
     ],
     chevrons: 4,
     bands: 2
@@ -195,7 +195,7 @@ const FLAME_FRAG = /* glsl */`
     radial = smoothstep(0.0, 0.55, radial);
 
     float a = clamp(ragged * radial, 0.0, 1.0);
-    a *= (0.13 + uThrottle * 0.55) * uGain;
+    a *= (0.16 + uThrottle * 0.5) * uGain;
     if (a < 0.01) discard;
 
     // white-hot at the throat, level colour further out
@@ -298,8 +298,8 @@ class GachaEngine {
   constructor(container) {
     this.container = container;
     this.level = 4;
-    this.throttle = 0.24;      // idle burn
-    this.targetThrottle = 0.24;
+    this.throttle = 0.32;      // idle burn
+    this.targetThrottle = 0.32;
     this.warp = 0;
     this.targetWarp = 0;
     this.isLaunching = false;
@@ -385,7 +385,7 @@ class GachaEngine {
 
   _initLights() {
     // Key — warm, upper-left, casts the shadow onto the pedestal
-    this.key = new THREE.DirectionalLight(0xfff0dd, 3.4);
+    this.key = new THREE.DirectionalLight(0xfff4e2, 4.2);
     this.key.position.set(-5, 7, 6);
     this.key.castShadow = true;
     this.key.shadow.mapSize.set(1024, 1024);
@@ -399,7 +399,7 @@ class GachaEngine {
     this.scene.add(this.key);
 
     // Rim — level-coloured, behind and to the right, separates hull from bg
-    this.rim = new THREE.DirectionalLight(0x00d5ff, 3.4);
+    this.rim = new THREE.DirectionalLight(0x00d5ff, 4.6);
     this.rim.position.set(5.5, 2.2, -5);
     this.scene.add(this.rim);
 
@@ -619,22 +619,65 @@ class GachaEngine {
     return pts;
   }
 
+  /** Drifting asteroid field — the debris scattered across the reference. */
+  _addAsteroids() {
+    const rockMat = new THREE.MeshStandardMaterial({
+      color: 0x4a4640, metalness: 0.3, roughness: 0.9, flatShading: true
+    });
+    this.disposables.push(rockMat);
+    this.asteroids = [];
+    const specs = [
+      { r: 1.6, p: [22, 8, -70] }, { r: 0.9, p: [-19, 14, -60] },
+      { r: 2.2, p: [28, -6, -88] }, { r: 0.7, p: [-25, 4, -55] },
+      { r: 1.1, p: [16, 17, -75] }, { r: 0.8, p: [-14, -14, -58] },
+      { r: 1.4, p: [31, 13, -95] }
+    ];
+    for (const sp of specs) {
+      // lumpy rock: an icosahedron with its verts jittered
+      const geo = new THREE.IcosahedronGeometry(sp.r, 1);
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const f = 0.72 + Math.random() * 0.5;
+        pos.setXYZ(i, pos.getX(i) * f, pos.getY(i) * f, pos.getZ(i) * f);
+      }
+      geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, rockMat);
+      m.position.set(...sp.p);
+      m.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      m.userData.spin = (Math.random() - 0.5) * 0.3;
+      this.scene.add(m);
+      this.asteroids.push(m);
+      this.disposables.push(geo);
+    }
+  }
+
   _initCosmos() {
     // Everything here lives far behind the stage and is deliberately dim —
     // it must add depth without ever competing with the ship.
+    this._addAsteroids();
+
     this.galaxy = this._addGalaxy({
-      position: [-34, 30, -165],
-      radius: 34, count: 13000, arms: 4, spin: 4.1,
-      coreColor: 0xffe2b0, armColor: 0x4f8dff, scale: 1.75
+      position: [-36, 28, -165],
+      radius: 32, count: 12000, arms: 4, spin: 4.1,
+      coreColor: 0xffe2b0, armColor: 0x4f8dff, scale: 1.7
     });
 
+    // a second bright compact galaxy / black-hole glow on the RIGHT, matching
+    // the reference's blue swirl over there
+    this.galaxyR = this._addGalaxy({
+      position: [40, -6, -150],
+      radius: 15, count: 5000, arms: 3, spin: 5.5,
+      coreColor: 0xcfe8ff, armColor: 0x2f7dff, scale: 1.5
+    });
+
+    // big hero planet, upper-right, larger and closer like the reference
     this.planetA = this._addPlanet({
-      radius: 5.2,
-      position: [30, 20, -125],
+      radius: 7.5,
+      position: [33, 24, -120],
       bands: ['#c9a06a', '#e8cf9e', '#a8763f', '#e0bd85', '#8a5c33'],
       seed: 7,
       ring: 0xffcf9a,
-      tilt: 0.22
+      tilt: 0.26
     });
 
     this.planetB = this._addPlanet({
@@ -794,6 +837,28 @@ class GachaEngine {
     grp.add(this.vortex);
     this.disposables.push(this.vortex.geometry, this.vortexMat);
 
+    // radiant light-beam cone rising from the core — the volumetric energy
+    // glow that makes the portal read as powered (AAA touch)
+    this.beamMat = new THREE.MeshBasicMaterial({
+      color: 0xffb347, transparent: true, opacity: 0.06,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+    });
+    const beam = new THREE.Mesh(new THREE.ConeGeometry(1.0, 2.4, 32, 1, true), this.beamMat);
+    beam.position.y = 1.5;
+    grp.add(beam);
+    this.disposables.push(beam.geometry, this.beamMat);
+
+    // bright hot point at the very centre for a strong bloom kick
+    this.coreMat = new THREE.MeshBasicMaterial({
+      color: 0xfff2c0, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    this.vortexCore = new THREE.Mesh(new THREE.CircleGeometry(0.55, 32), this.coreMat);
+    this.vortexCore.rotation.x = -Math.PI / 2;
+    this.vortexCore.position.y = 0.34;
+    grp.add(this.vortexCore);
+    this.disposables.push(this.vortexCore.geometry, this.coreMat);
+
     // faint level-coloured wash over the vortex (kept for recolour hook)
     this.padMat.opacity = 0;
 
@@ -857,11 +922,11 @@ class GachaEngine {
   _mats(spec) {
     const hull = new THREE.MeshPhysicalMaterial({
       color: spec.hull,
-      metalness: 0.62,       // less mirror, more painted-metal so the colour holds
-      roughness: 0.3,
+      metalness: 0.72,
+      roughness: 0.22,
       clearcoat: 1.0,
       clearcoatRoughness: 0.1,
-      envMapIntensity: 0.85  // reined in — IBL was bleaching the blue to grey
+      envMapIntensity: 1.15
     });
     const hullLight = new THREE.MeshPhysicalMaterial({
       color: HULL_WHITE,
@@ -1113,14 +1178,6 @@ class GachaEngine {
         this.disposables.push(glowStrip.material);
       }
 
-      // 5. gold winglet tip cap for a sharper, layered read
-      const tip = new THREE.Mesh(
-        new THREE.BoxGeometry(0.14, 0.5, 0.24), M.gold
-      );
-      tip.position.set(R * 0.78 + spec.wingSpan, -H * 0.24 - spec.wingDrop * 0.5, 0);
-      tip.rotation.z = 0.5;
-      tip.castShadow = true;
-      pivot.add(tip);
 
       g.add(pivot);
     }
@@ -1290,8 +1347,8 @@ class GachaEngine {
       // ConeGeometry puts the apex at +Y and the wide base at -Y. Flip it so the
       // BASE sits at the nozzle mouth (y = 0) and the apex tapers away downward,
       // otherwise the plume fires up through the hull.
-      const len = n.r * 4.6;
-      const geo = new THREE.ConeGeometry(n.r * 0.95, len, 28, 1, true);
+      const len = n.r * 5.6;
+      const geo = new THREE.ConeGeometry(n.r * 0.85, len, 28, 1, true);
       geo.rotateX(Math.PI);
       geo.translate(0, -len / 2, 0);   // base at y=0, apex at y=-len
 
@@ -1487,7 +1544,7 @@ class GachaEngine {
     this._launchT = 0;
     this._fired = false;
     this.padSurge = 0;
-    this.targetThrottle = 0.24;
+    this.targetThrottle = 0.32;
     this.targetWarp = 0;
     this.shake = 0;
     if (this.smoke) this.smoke.visible = false;
@@ -1612,7 +1669,7 @@ class GachaEngine {
 
     // ---- flame plumes lengthen with throttle
     if (this.flames) {
-      const s = 0.5 + this.throttle * 1.5;
+      const s = 0.92 + this.throttle * 1.2;
       for (const f of this.flames) f.scale.set(1, s, 1);
     }
 
@@ -1622,9 +1679,16 @@ class GachaEngine {
 
     // ---- deep-space props drift, very slowly
     if (this.galaxy) this.galaxy.rotation.z += dt * 0.012;
+    if (this.galaxyR) this.galaxyR.rotation.z += dt * 0.02;
     if (this.planetA) this.planetA.rotation.y += dt * 0.018;
     if (this.planetB) this.planetB.rotation.y += dt * 0.03;
     if (this.moon) this.moon.rotation.y += dt * 0.05;
+    if (this.asteroids) {
+      for (const a of this.asteroids) {
+        a.rotation.y += dt * a.userData.spin;
+        a.rotation.x += dt * a.userData.spin * 0.6;
+      }
+    }
 
     // ---- pedestal
     this.ringA.rotation.z += dt * 0.55;
