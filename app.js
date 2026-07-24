@@ -10,7 +10,7 @@
   let state = {
     gold: parseInt(localStorage.getItem("gacha_gold")) || 5000000,
     silver: parseInt(localStorage.getItem("gacha_silver")) || 800000,
-    activeLevel: 4,
+    activeLevel: 5,
     activeTab: "top1",
     progress: parseInt(localStorage.getItem("gacha_progress")) || 0,
     soundOn: true,
@@ -62,6 +62,17 @@
       shipName: "FLAGSHIP",
       cost: 10000,
       chance: 45,
+      silverVal: "1000000",
+      skinVal: "6000000",
+      frameVal: "X 4"
+    },
+    5: {
+      color: "#ffd24a", // Gold/Cyan ultimate
+      glow: "rgba(255, 210, 74, 0.45)",
+      shipImg: "assets/ship_lv5.png",
+      shipName: "OVERLORD",
+      cost: 10000,
+      chance: 55,
       silverVal: "1000000",
       skinVal: "6000000",
       frameVal: "X 4"
@@ -968,9 +979,17 @@
     }
 
     // Push the current level into the freshly booted engine.
-    // ?lv=1..4 deep-links straight to a tier (shareable, and handy for QA).
-    const lv = parseInt(new URLSearchParams(location.search).get("lv"), 10);
+    // ?lv=1..5 deep-links straight to a tier (shareable, and handy for QA).
+    const params = new URLSearchParams(location.search);
+    const lv = parseInt(params.get("lv"), 10);
     switchLevel(levelConfig[lv] ? lv : state.activeLevel);
+
+    // ?still=1 skips the drop-in entry — for headless screenshots where the
+    // animation clock doesn't advance. No effect on normal play.
+    if (params.get("still") === "1" && e._entryT !== undefined) {
+      e._entryT = 1; e._entryLanded = true; e.warp = 0;
+      if (e.shipRoot) e.shipRoot.position.y = 0.7;
+    }
   }
 
   if (window.GachaEngine) onEngineReady();
@@ -982,7 +1001,7 @@
   // Initial syncs (UI only — the ship arrives with the engine handshake)
   updateWalletUI();
   updateProgressUI();
-  switchLevel(4);
+  switchLevel(5);
 
 
 })();

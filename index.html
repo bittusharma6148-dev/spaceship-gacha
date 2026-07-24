@@ -191,9 +191,15 @@
           <!-- Spaceship Display & Pedestal -->
           <div class="spaceship-stage">
 
-            <!-- LEVEL SELECTOR (Vertical Badges stacked LV4 down to LV1) -->
+            <!-- LEVEL SELECTOR (Vertical Badges stacked LV5 down to LV1) -->
             <div class="level-selector">
-              <button class="lv-badge active" data-lv="4">
+              <button class="lv-badge active" data-lv="5">
+                <div class="lv-badge-card">
+                  <img src="assets/ship_lv5.png?v=6" class="lv-badge-thumb" alt="LV5">
+                  <div class="lv-badge-label">LV.5</div>
+                </div>
+              </button>
+              <button class="lv-badge" data-lv="4">
                 <div class="lv-badge-card">
                   <img src="assets/ship_lv2.png?v=6" class="lv-badge-thumb" alt="LV4">
                   <div class="lv-badge-label">LV.4</div>
@@ -223,12 +229,6 @@
                  They live in #stage-3d (WebGL) — no sprites, no CSS fakes. -->
 
             <div class="flash-overlay" id="launch-flash" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, #ffffff 10%, var(--level-color) 60%, transparent 100%); z-index: 9; opacity: 0; pointer-events: none; mix-blend-mode: screen; filter: blur(5px);"></div>
-
-            <!-- Flying label overlay -->
-            <div class="owner-pill" id="owner-name-tag">
-              <div class="avatar-sm"></div>
-              <span>lover boy</span>
-            </div>
           </div>
 
           <!-- PROGRESS BAR TUBE (Right - Styled as Thunderbolt Power Cell) -->

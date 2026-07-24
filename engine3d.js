@@ -18,8 +18,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 // stage band — above the countdown row, below the event banner. _frameCamera()
 // auto-fits whatever was just built, so these describe the TARGET: the assembly
 // fills this fraction of the view, centred this far down the screen.
-const FRAME_FILL = 0.52;
-const FRAME_CENTRE = 0.475;
+const FRAME_FILL = 0.53;
+const FRAME_CENTRE = 0.49;
 
 // Where the barrel hands off to the nose cone, as a fraction of hull radius.
 // Kept high: the reference nose is a broad stubby cap, not a narrow spire.
@@ -130,6 +130,31 @@ const SHIPS = {
     ],
     chevrons: 4,
     bands: 2
+  },
+  5: {
+    name: 'OVERLORD',
+    accent: 0xffd24a,        // gold-cyan ultimate tier
+    flameCore: 0xffffff,
+    flameEdge: 0x00e5ff,
+    hull: 0x0f4fa8,          // deep royal blue
+    nose: 0xfff0b0,          // gold-white nose
+    body: 4.1,
+    radius: 0.86,
+    noseLen: 1.35,
+    wings: 6,                // six wings — the biggest silhouette
+    wingSpan: 1.55,
+    wingDrop: 1.6,
+    boosters: 4,             // quad boosters
+    boosterScale: 0.6,
+    engines: [
+      { x: 0, z: 0, r: 0.44 },
+      { x: -0.72, z: 0, r: 0.28 },
+      { x: 0.72, z: 0, r: 0.28 },
+      { x: -0.36, z: 0.5, r: 0.2 },
+      { x: 0.36, z: 0.5, r: 0.2 }
+    ],
+    chevrons: 5,
+    bands: 3
   }
 };
 
@@ -1202,13 +1227,21 @@ class GachaEngine {
       g.add(stripe);
     }
 
-    /* ---- side boosters: pale nose cap, blue tube, gold skirt */
+    /* ---- side boosters: pale nose cap, blue tube, gold skirt.
+       Two boosters sit left/right; four add an inner pair set back in Z so the
+       cluster reads as a heavy multi-engine tail. */
     if (spec.boosters) {
       const bs = spec.boosterScale;
+      const layout = spec.boosters <= 2
+        ? [{ side: -1, z: 0, s: 1 }, { side: 1, z: 0, s: 1 }]
+        : [{ side: -1, z: 0, s: 1 }, { side: 1, z: 0, s: 1 },
+           { side: -0.55, z: 0.55, s: 0.8 }, { side: 0.55, z: 0.55, s: 0.8 }];
       for (let i = 0; i < spec.boosters; i++) {
-        const side = i === 0 ? -1 : 1;
+        const L = layout[i % layout.length];
+        const side = L.side;
         const bg = new THREE.Group();
-        bg.position.set(side * (R + bs * 0.72), -H * 0.18, 0);
+        bg.scale.setScalar(L.s);
+        bg.position.set(side * (R + bs * 0.72), -H * 0.18, L.z * R);
 
         const tube = new THREE.Mesh(
           new THREE.CapsuleGeometry(bs * 0.42, H * 0.42, 8, 32), M.hull
@@ -1300,10 +1333,11 @@ class GachaEngine {
    * seated in the same stage band.
    */
   _frameCamera() {
-    // Measure the hull only. Flames and the spark cloud have loose, animated
-    // bounds, so including them makes the framing jitter between rebuilds.
+    // Frame the rocket plus the visible deck rim. The deck's deep base extends
+    // below this point and sits behind the opaque reward panel (as in the
+    // reference), so the rocket reads big while the panel keeps its 25%.
     const box = new THREE.Box3().setFromObject(this.rocket);
-    box.expandByPoint(new THREE.Vector3(0, this.pedestal.position.y - 0.6, 0));
+    box.expandByPoint(new THREE.Vector3(0, this.pedestal.position.y + 0.2, 0));
 
     const height = Math.max(box.max.y - box.min.y, 0.001);
     const centre = (box.max.y + box.min.y) / 2;
@@ -1497,7 +1531,7 @@ class GachaEngine {
     // The flight runs in three beats: CHARGE (pad spins up, ship crouches),
     // IGNITION (violent hold-down rattle), LIFT (explosive climb). Durations
     // scale with tier weight so the heavy lifter feels heavy.
-    const dur = { 1: 2.0, 2: 2.2, 3: 2.8, 4: 2.4 }[this.level] || 2.3;
+    const dur = { 1: 2.0, 2: 2.2, 3: 2.8, 4: 2.4, 5: 2.6 }[this.level] || 2.3;
     this._launchDur = dur;
     this._chargeEnd = 0.24;       // fraction: end of charge
     this._igniteEnd = 0.44;       // fraction: release point

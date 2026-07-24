@@ -1286,12 +1286,17 @@ body {
 .rewards-section {
   position: relative;
   z-index: 10;
+  /* Boss layout: reward panel is a compact strip at the bottom (~25%), the
+     stage owns the top ~75%. Fixed proportion, nothing stretched. */
+  flex: 0 0 26%;
+  min-height: 0;
+  overflow: hidden;
   background: var(--glass-bg);
   border-top: 2px solid var(--gold-primary);
-  padding: 12px 14px 22px 14px;
+  padding: 7px 12px 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 5px;
   backdrop-filter: blur(12px);
   box-shadow: 0 -10px 30px rgba(0,0,0,0.7);
 }
@@ -3069,6 +3074,72 @@ model-viewer {
 .hud-bracket, .hud-diagnostics-left, .hud-diagnostics-right {
   display: none !important;
 }
+
+/* ================================================================
+   COMPACT REWARD PANEL — Boss layout: bottom section ~25%, stage 75%.
+   Overrides every size driver so the panel fits without stretching.
+   ================================================================ */
+.rewards-section {
+  flex: 0 0 26% !important;
+  min-height: 0 !important;
+  margin: 6px 10px 8px 10px !important;
+  padding: 12px 10px 8px 10px !important;
+  gap: 4px !important;
+  overflow: hidden !important;
+  justify-content: space-between;
+}
+.rewards-section-title { top: -11px; padding: 1px 18px; }
+.rewards-section-title span { font-size: 11px; letter-spacing: 1.2px; }
+
+.tabs-header {
+  margin-bottom: 4px !important;
+  padding-bottom: 2px !important;
+}
+.tab-item { font-size: 11px !important; padding: 2px 10px !important; }
+
+.reward-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 5px !important;
+  margin: 0 !important;
+  width: 100% !important;
+  overflow: visible !important;
+}
+/* the original cards carry a fixed/min width that broke the 4-up grid — force
+   every card to fill exactly its 1fr column so all four fit, none clipped */
+.reward-card-wrapper {
+  margin: 0 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  flex: none !important;
+}
+.reward-card {
+  --chamfer: 7px;
+  min-width: 0 !important;
+  width: 100% !important;
+  flex: none !important;
+}
+/* card art area scales to the row; keeps a clean square-ish tile */
+.reward-card .card-inner { min-height: 0 !important; aspect-ratio: 1 / 0.64; }
+.reward-icon-wrap { width: 100% !important; height: 100% !important; }
+.reward-img-thumbnail { max-width: 72% !important; max-height: 72% !important; }
+.reward-value {
+  margin-top: 2px !important;
+  padding: 1px 7px !important;
+  font-size: 9px !important;
+}
+.chance-tag { font-size: 7px !important; padding: 1px 3px !important; }
+
+.action-footer { gap: 4px !important; margin-top: 3px !important; }
+.btn-action-primary { height: 30px !important; font-size: 12px !important; }
+.btn-action-sub { height: 22px !important; font-size: 10px !important; }
+
+/* The stage now owns everything above the panel — let it breathe full width. */
+.spaceship-stage { height: auto !important; flex: 1; }
+.battlefield-area { padding: 4px 0 0 0 !important; }
+
+/* trim the top chrome so the rocket gets the lion's share of height */
+.lucky-bag-banner { margin-top: 4px !important; }
 
 
 
