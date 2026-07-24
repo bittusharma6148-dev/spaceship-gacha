@@ -304,6 +304,8 @@ class GachaEngine {
     this.targetWarp = 0;
     this.isLaunching = false;
     this.shake = 0;
+    this._entryT = 1;            // set to 0 by setLevel to play the drop-in entry
+    this._entryLanded = true;
     this.clock = new THREE.Clock();
     this.disposables = [];
 
@@ -370,7 +372,7 @@ class GachaEngine {
       tex.colorSpace = THREE.SRGBColorSpace;
       this.scene.background = tex;
       // Held down so the nebula's bright core never competes with the ship.
-      this.scene.backgroundIntensity = 0.4;
+      this.scene.backgroundIntensity = 0.3;
       this.disposables.push(tex);
     });
 
@@ -1468,12 +1470,14 @@ class GachaEngine {
     this.starUniforms.uColor.value.copy(c);
 
     if (!instant) {
-      // snappy materialise-in (scale only — the ship never rotates)
-      this.shipRoot.scale.setScalar(0.78);
-      this._spawnT = 0;
+      // AAA warp-drop entry from above with a landing impact
+      this.shipRoot.scale.setScalar(0.9);
+      this._entryT = 0;
+      this._entryLanded = false;
     } else {
       this.shipRoot.scale.setScalar(1);
-      this._spawnT = 1;
+      this._entryT = 1;
+      this._entryLanded = true;
     }
   }
 
@@ -1557,11 +1561,13 @@ class GachaEngine {
     this.shake = 0;
     if (this.smoke) this.smoke.visible = false;
     if (this.shipRoot) {
-      this.shipRoot.position.set(0, 0, 0);
+      this.shipRoot.position.set(0, SHIP_LIFT, 0);
       this.shipRoot.scale.setScalar(1);
       this.shipRoot.visible = true;
     }
-    this._spawnT = 0;
+    // replay the entry drop after a launch, so the ship arrives fresh
+    this._entryT = 0;
+    this._entryLanded = false;
   }
 
   /* ------------------------------------------------------------- loop */
@@ -1574,19 +1580,30 @@ class GachaEngine {
     this.throttle += (this.targetThrottle - this.throttle) * Math.min(dt * 5.5, 1);
     this.warp += (this.targetWarp - this.warp) * Math.min(dt * 2.6, 1);
 
-    // ---- ship idle motion: a slow hover only. No spin, no lean — the
-    // reference client presents the ship dead-on and perfectly still.
-    if (this.shipRoot && !this.isLaunching) {
-      // lifted clear of the deck so the vortex glows in the gap below the engines
+    // ---- AAA entry: ship warp-drops from above onto the deck, then a landing
+    // flash + shockwave + shake fire as it seats. Runs on load and level swap.
+    if (this._entryT < 1) {
+      this._entryT = Math.min(this._entryT + dt * 1.7, 1);
+      const p = this._entryT;
+      const ease = 1 - Math.pow(1 - p, 3.2);        // fast-in, hard settle
+      const drop = 18 * (1 - ease);                 // falls from +18
+      const overshoot = Math.sin(p * Math.PI) * 0.25 * (1 - p); // squash at base
+      this.shipRoot.position.y = SHIP_LIFT + drop - overshoot;
+      this.shipRoot.scale.setScalar(0.9 + 0.1 * ease);
+      this.shipRoot.rotation.set(0, 0, 0);
+      this.warp = Math.max(0, 1 - p * 2);            // streak the stars on arrival
+      if (!this._entryLanded && p > 0.82) {          // impact beat
+        this._entryLanded = true;
+        this.shake = 0.8;
+        this.shock.visible = true;
+        this._shockT = 0;
+        this.padSurge = 1;
+      }
+    } else if (this.shipRoot && !this.isLaunching) {
+      // idle hover — lifted clear so the vortex glows in the gap below the engines
       this.shipRoot.position.y = SHIP_LIFT + Math.sin(t * 1.15) * 0.1;
       this.shipRoot.rotation.set(0, 0, 0);
-    }
-
-    // ---- level-switch materialise
-    if (this._spawnT < 1) {
-      this._spawnT = Math.min(this._spawnT + dt * 3.4, 1);
-      const e = 1 - Math.pow(1 - this._spawnT, 3);
-      this.shipRoot.scale.setScalar(0.78 + 0.22 * e);
+      this.padSurge = Math.max(0, (this.padSurge || 0) - dt * 1.5);
     }
 
     // ---- launch flight: CHARGE -> IGNITION -> LIFT

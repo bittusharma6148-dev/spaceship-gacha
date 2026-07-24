@@ -1178,7 +1178,7 @@ body {
   z-index: 10;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;   /* countdown centred, not left-aligned */
   padding: 0 18px;
   height: 38px;
   background: 

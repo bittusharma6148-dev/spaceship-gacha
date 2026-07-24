@@ -273,7 +273,56 @@
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
       osc.start(now);
       osc.stop(now + 0.08);
-    } 
+    }
+    else if (type === "entry") {
+      // AAA arrival: a descending warp whoosh (~0.5s) that lands on a deep
+      // impact boom — the sound of the ship dropping onto the deck.
+      osc.disconnect(gain);
+
+      // 1) whoosh: filtered noise sweeping down
+      const noiseLen = 0.55;
+      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * noiseLen, audioCtx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1);
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = buf;
+      const nf = audioCtx.createBiquadFilter();
+      nf.type = "bandpass";
+      nf.frequency.setValueAtTime(3200, now);
+      nf.frequency.exponentialRampToValueAtTime(320, now + 0.5);
+      nf.Q.value = 1.4;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.0001, now);
+      ng.gain.linearRampToValueAtTime(0.5, now + 0.12);
+      ng.gain.exponentialRampToValueAtTime(0.18, now + 0.46);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
+      noise.connect(nf); nf.connect(ng); ng.connect(audioCtx.destination);
+      noise.start(now); noise.stop(now + noiseLen);
+
+      // 2) impact boom at landing (~0.46s in): a fast pitch-down sine thud
+      const boom = audioCtx.createOscillator();
+      const bg = audioCtx.createGain();
+      boom.type = "sine";
+      boom.frequency.setValueAtTime(180, now + 0.44);
+      boom.frequency.exponentialRampToValueAtTime(42, now + 0.7);
+      bg.gain.setValueAtTime(0.0001, now + 0.44);
+      bg.gain.linearRampToValueAtTime(0.7, now + 0.48);
+      bg.gain.exponentialRampToValueAtTime(0.0001, now + 0.95);
+      boom.connect(bg); bg.connect(audioCtx.destination);
+      boom.start(now + 0.44); boom.stop(now + 0.98);
+
+      // 3) shimmer ping on settle
+      const ping = audioCtx.createOscillator();
+      const pg = audioCtx.createGain();
+      ping.type = "triangle";
+      ping.frequency.setValueAtTime(1400, now + 0.5);
+      ping.frequency.exponentialRampToValueAtTime(2600, now + 0.72);
+      pg.gain.setValueAtTime(0.0001, now + 0.5);
+      pg.gain.linearRampToValueAtTime(0.16, now + 0.55);
+      pg.gain.exponentialRampToValueAtTime(0.0001, now + 0.85);
+      ping.connect(pg); pg.connect(audioCtx.destination);
+      ping.start(now + 0.5); ping.stop(now + 0.88);
+    }
     else if (type === "level") {
       osc.type = "sine";
       osc.frequency.setValueAtTime(250, now);
@@ -528,8 +577,9 @@
   // Level Selector
   function switchLevel(levelNum) {
     if (state.isSpinning) return;
-    
-    playSynthSound("level");
+
+    // AAA arrival — the engine plays the warp-drop, this is its whoosh + boom
+    playSynthSound("entry");
     state.activeLevel = levelNum;
 
     // Trigger subtle viewport bump shake on level switch
