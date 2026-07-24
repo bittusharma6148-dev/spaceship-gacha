@@ -340,7 +340,7 @@ class GachaEngine {
     // ACES crushes saturation hard — it turned the gold trim tan and the hull
     // pastel. Neutral keeps the toy-bright palette the reference lives on.
     this.renderer.toneMapping = THREE.NeutralToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 1.12;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -403,12 +403,19 @@ class GachaEngine {
     this.rim.position.set(5.5, 2.2, -5);
     this.scene.add(this.rim);
 
-    // Fill — cool bounce from below
-    this.fill = new THREE.DirectionalLight(0x88b8ff, 0.7);
-    this.fill.position.set(2, -4, 4);
+    // Fill — cool bounce from below, front-right, lifts the shadow side so the
+    // hull reads bright and even like the reference art
+    this.fill = new THREE.DirectionalLight(0xbfe0ff, 1.5);
+    this.fill.position.set(4, -2, 6);
     this.scene.add(this.fill);
 
-    this.scene.add(new THREE.AmbientLight(0x4a5a78, 0.5));
+    // Back rim — a second cyan light straight behind, for a bright hero edge
+    // that pops the ship off the dark space
+    this.rim2 = new THREE.DirectionalLight(0x7fdcff, 2.6);
+    this.rim2.position.set(-4, 3, -6);
+    this.scene.add(this.rim2);
+
+    this.scene.add(new THREE.AmbientLight(0x5a6a8a, 0.85));
 
     // Engine light — lives at the nozzles, drives the pedestal hot-spot
     this.engineLight = new THREE.PointLight(0x00d5ff, 14, 16, 2);
@@ -850,10 +857,10 @@ class GachaEngine {
 
     // bright hot point at the very centre for a strong bloom kick
     this.coreMat = new THREE.MeshBasicMaterial({
-      color: 0xfff2c0, transparent: true, opacity: 0.9,
+      color: 0xffe0a0, transparent: true, opacity: 0.7,
       blending: THREE.AdditiveBlending, depthWrite: false
     });
-    this.vortexCore = new THREE.Mesh(new THREE.CircleGeometry(0.55, 32), this.coreMat);
+    this.vortexCore = new THREE.Mesh(new THREE.CircleGeometry(0.42, 32), this.coreMat);
     this.vortexCore.rotation.x = -Math.PI / 2;
     this.vortexCore.position.y = 0.34;
     grp.add(this.vortexCore);
@@ -1149,11 +1156,11 @@ class GachaEngine {
       frame.castShadow = true;
       pivot.add(frame);
 
-      // 2. blue face on both sides, inset so gold shows as a border
-      for (const z of [0.055, -0.055]) {
+      // 2. blue face on both sides, inset so gold reads as a thin trim border
+      for (const z of [0.058, -0.058]) {
         const face = new THREE.Mesh(wingGeo, M.hull);
-        face.position.set(R * 0.78, -H * 0.24 + 0.06, z);
-        face.scale.set(0.78, 0.82, 0.4);
+        face.position.set(R * 0.78, -H * 0.24 + 0.03, z);
+        face.scale.set(0.88, 0.9, 0.5);
         pivot.add(face);
       }
 
@@ -1452,6 +1459,7 @@ class GachaEngine {
     // recolour the level-driven lighting + pedestal
     const c = new THREE.Color(spec.accent);
     this.rim.color.copy(c);
+    if (this.rim2) this.rim2.color.copy(c);
     this.engineLight.color.copy(new THREE.Color(spec.flameEdge));
     this.ringA.material.color.copy(c);
     this.padTrim.color.copy(c);
