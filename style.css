@@ -962,16 +962,17 @@ body {
 /* Username overlay bubble */
 .owner-pill {
   position: absolute;
-  top: 35px;
-  background: rgba(0, 0, 0, 0.7);
+  top: 6px;                    /* top-left corner, clear of the ship's centreline */
+  left: 8px;
+  background: rgba(0, 0, 0, 0.55);
   border: 1px solid var(--gold-primary);
-  box-shadow: 0 0 10px var(--gold-glow);
-  padding: 4px 10px 4px 6px;
+  box-shadow: 0 0 8px var(--gold-glow);
+  padding: 3px 9px 3px 5px;
   border-radius: 20px;
   display: flex;
   align-items: center;
   gap: 5px;
-  animation: labelFloat 4s ease-in-out infinite alternate;
+  z-index: 6;
 }
 
 .avatar-sm {
@@ -992,8 +993,8 @@ body {
 
 @keyframes labelFloat {
   0% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
-  100% { transform: translateY(-2px); }
+  50% { transform: translateY(-3px); }
+  100% { transform: translateY(-1px); }
 }
 
 /* ==========================================

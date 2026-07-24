@@ -18,8 +18,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 // stage band — above the countdown row, below the event banner. _frameCamera()
 // auto-fits whatever was just built, so these describe the TARGET: the assembly
 // fills this fraction of the view, centred this far down the screen.
-const FRAME_FILL = 0.48;
-const FRAME_CENTRE = 0.40;
+const FRAME_FILL = 0.52;
+const FRAME_CENTRE = 0.475;
 
 // Where the barrel hands off to the nose cone, as a fraction of hull radius.
 // Kept high: the reference nose is a broad stubby cap, not a narrow spire.
@@ -1612,31 +1612,35 @@ class GachaEngine {
       const p = Math.min(this._launchT / this._launchDur, 1);
 
       if (p < this._chargeEnd) {
-        // CHARGE: engines spool up, pad energy surges, ship crouches slightly
+        // CHARGE: engines spool up smoothly, pad surges, ship dips to crouch
         const v = p / this._chargeEnd;
-        this.targetThrottle = 0.4 + v * 0.4;
-        this.shipRoot.position.y = -0.14 * v;                 // squat before the leap
-        this.shipRoot.position.x = (Math.random() - 0.5) * 0.02 * v;
-        this.padSurge = v;
+        const ev = v * v * (3 - 2 * v);                       // smoothstep
+        this.targetThrottle = 0.4 + ev * 0.45;
+        this.shipRoot.position.y = SHIP_LIFT - 0.18 * ev;     // squat before the leap
+        this.shipRoot.position.x = 0;
+        this.shipRoot.rotation.set(0, 0, 0);
+        this.padSurge = ev;
       } else if (p < this._igniteEnd) {
-        // IGNITION: full throttle, violent hold-down rattle, then release burst
+        // IGNITION: full throttle, controlled hold-down rumble (smooth, not noisy)
         const v = (p - this._chargeEnd) / (this._igniteEnd - this._chargeEnd);
         this.targetThrottle = 1.0;
-        const jitter = 0.14 * (0.4 + v);
-        this.shipRoot.position.y = -0.14 + v * 0.26 + (Math.random() - 0.5) * jitter;
-        this.shipRoot.position.x = (Math.random() - 0.5) * jitter * 0.7;
+        const rumble = 0.05 * (1 - v) + 0.03;                 // eases off toward release
+        this.shipRoot.position.y = SHIP_LIFT - 0.18 + v * 0.24
+          + Math.sin(t * 60) * rumble;                        // periodic, not random -> smooth
+        this.shipRoot.position.x = Math.sin(t * 47) * rumble * 0.5;
         this.padSurge = 1;
-        if (!this._fired && v > 0.86) this._fireLiftoff();   // fire the burst on release
+        if (!this._fired && v > 0.86) this._fireLiftoff();
       } else {
-        // LIFT: explosive accelerating climb with a fast barrel roll
+        // LIFT: smooth accelerating climb with ONE graceful roll, eased in
         if (!this._fired) this._fireLiftoff();
         this.targetWarp = 1.0;
         const c = (p - this._igniteEnd) / (1 - this._igniteEnd);
-        const acc = Math.pow(c, 2.7);
-        this.shipRoot.position.y = 0.12 + acc * 34;
+        const acc = c * c * c;                                // clean cubic ease-in
+        this.shipRoot.position.y = SHIP_LIFT + 0.06 + acc * 36;
         this.shipRoot.position.x = 0;
-        this.shipRoot.rotation.y += dt * (1.0 + c * 11);      // spin up as it screams away
-        this.shipRoot.scale.setScalar(1 - c * 0.4);
+        // a single smooth 360 roll over the ascent, eased — no runaway spin
+        this.shipRoot.rotation.y = (c * c) * Math.PI * 2;
+        this.shipRoot.scale.setScalar(1 - c * 0.35);
       }
 
       if (p >= 1 && this._launchResolve) {

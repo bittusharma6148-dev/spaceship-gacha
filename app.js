@@ -536,7 +536,36 @@
       
       warpOsc.start(now + 0.4);
       warpOsc.stop(now + 1.2);
-    } 
+
+      // 6. LIFTOFF THOOM — a deep chest-thump impact timed to the engine's
+      // release beat (~1.05s), the ultra-level low-end punch of the blastoff.
+      const thoom = audioCtx.createOscillator();
+      const thoomGain = audioCtx.createGain();
+      thoom.type = "sine";
+      thoom.frequency.setValueAtTime(120, now + 1.0);
+      thoom.frequency.exponentialRampToValueAtTime(28, now + 1.55);
+      thoomGain.gain.setValueAtTime(0.0001, now + 1.0);
+      thoomGain.gain.linearRampToValueAtTime(1.7, now + 1.06);
+      thoomGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.7);
+      thoom.connect(thoomGain);
+      thoomGain.connect(audioCtx.destination);
+      thoom.start(now + 1.0);
+      thoom.stop(now + 1.72);
+
+      // high shimmer sparkle riding the release for brightness up top
+      const spk = audioCtx.createOscillator();
+      const spkGain = audioCtx.createGain();
+      spk.type = "triangle";
+      spk.frequency.setValueAtTime(2200, now + 1.02);
+      spk.frequency.exponentialRampToValueAtTime(5200, now + 1.4);
+      spkGain.gain.setValueAtTime(0.0001, now + 1.02);
+      spkGain.gain.linearRampToValueAtTime(0.12, now + 1.08);
+      spkGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
+      spk.connect(spkGain);
+      spkGain.connect(audioCtx.destination);
+      spk.start(now + 1.02);
+      spk.stop(now + 1.52);
+    }
     else if (type === "reveal") {
       const notes = [329.63, 392.00, 523.25, 659.25, 783.99, 1046.50, 1318.51];
       notes.forEach((freq, index) => {
