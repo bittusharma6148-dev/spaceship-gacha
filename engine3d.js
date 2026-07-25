@@ -61,7 +61,8 @@ const SHIPS = {
     boosters: 0,
     engines: [{ x: 0, z: 0, r: 0.34 }],
     chevrons: 2,
-    bands: 2
+    bands: 2,
+    flameScale: 0.75, feat: []
   },
   2: {
     name: 'INTERCEPTOR',
@@ -83,7 +84,8 @@ const SHIPS = {
       { x: 0.30, z: 0, r: 0.26 }
     ],
     chevrons: 3,
-    bands: 2
+    bands: 2,
+    flameScale: 0.95, feat: ['strips']
   },
   3: {
     name: 'HEAVY LIFTER',
@@ -106,7 +108,8 @@ const SHIPS = {
       { x: 0.55, z: 0, r: 0.28 }
     ],
     chevrons: 3,
-    bands: 3
+    bands: 3,
+    flameScale: 1.25, feat: ['armor','vents']
   },
   4: {
     name: 'FLAGSHIP',
@@ -129,7 +132,8 @@ const SHIPS = {
       { x: 0.66, z: 0, r: 0.26 }
     ],
     chevrons: 4,
-    bands: 2
+    bands: 2,
+    flameScale: 1.15, feat: ['cores','strips']
   },
   5: {
     name: 'OVERLORD',
@@ -138,24 +142,36 @@ const SHIPS = {
     flameEdge: 0x00e5ff,
     hull: 0x0f4fa8,          // deep royal blue
     nose: 0xfff0b0,          // gold-white nose
-    body: 4.1,
-    radius: 0.86,
-    noseLen: 1.35,
-    wings: 6,                // six wings — the biggest silhouette
-    wingSpan: 1.55,
-    wingDrop: 1.6,
-    boosters: 4,             // quad boosters
-    boosterScale: 0.6,
+    body: 4.2,
+    radius: 1.02,            // clearly the BROADEST hull
+    noseLen: 1.4,
+    wings: 6,                // six wings — the biggest, most futuristic silhouette
+    wingSpan: 1.95,          // widest wingspan by far
+    wingDrop: 1.75,
+    boosters: 4,             // quad boosters, spread wide
+    boosterScale: 0.66,
     engines: [
-      { x: 0, z: 0, r: 0.44 },
-      { x: -0.72, z: 0, r: 0.28 },
-      { x: 0.72, z: 0, r: 0.28 },
-      { x: -0.36, z: 0.5, r: 0.2 },
-      { x: 0.36, z: 0.5, r: 0.2 }
+      { x: 0, z: 0, r: 0.5 },
+      { x: -0.9, z: 0, r: 0.3 },
+      { x: 0.9, z: 0, r: 0.3 },
+      { x: -0.45, z: 0.55, r: 0.22 },
+      { x: 0.45, z: 0.55, r: 0.22 }
     ],
     chevrons: 5,
-    bands: 3
+    bands: 3,
+    flameScale: 1.5, feat: ['armor','vents','cores','antenna','stabilizers']
   }
+};
+
+// Per-tier FLIGHT choreography — each ship launches with its own character.
+// climbPow: acceleration curve · rollTurns: barrel rolls · sway: side weave ·
+// shake: camera punch · vibrate: hold-down rattle · dur is set in launch().
+const FLIGHT = {
+  1: { style: 'zip',   climbPow: 4.2, rollTurns: 0,   sway: 0.9,  shake: 0.55, vibrate: 0.9 },  // SCOUT: instant agile zip + weave
+  2: { style: 'dart',  climbPow: 3.4, rollTurns: 1,   sway: 0.4,  shake: 0.7,  vibrate: 1.0 },  // INTERCEPTOR: fast dart + single spin
+  3: { style: 'heavy', climbPow: 2.0, rollTurns: 0,   sway: 0.05, shake: 1.15, vibrate: 1.7 },  // HEAVY LIFTER: slow, ponderous, big shake
+  4: { style: 'cruise',climbPow: 2.7, rollTurns: 1,   sway: 0.1,  shake: 0.85, vibrate: 1.1 },  // FLAGSHIP: smooth powerful barrel roll
+  5: { style: 'warp',  climbPow: 3.0, rollTurns: 2,   sway: 0.15, shake: 1.3,  vibrate: 1.3 }   // OVERLORD: dramatic double-spiral warp
 };
 
 /* --------------------------------------------------------- flame material */
@@ -426,7 +442,7 @@ class GachaEngine {
     this.scene.add(this.key);
 
     // Rim — level-coloured, behind and to the right, separates hull from bg
-    this.rim = new THREE.DirectionalLight(0x00d5ff, 4.6);
+    this.rim = new THREE.DirectionalLight(0x00d5ff, 2.4);
     this.rim.position.set(5.5, 2.2, -5);
     this.scene.add(this.rim);
 
@@ -438,7 +454,7 @@ class GachaEngine {
 
     // Back rim — a second cyan light straight behind, for a bright hero edge
     // that pops the ship off the dark space
-    this.rim2 = new THREE.DirectionalLight(0x7fdcff, 2.6);
+    this.rim2 = new THREE.DirectionalLight(0x7fdcff, 1.5);
     this.rim2.position.set(-4, 3, -6);
     this.scene.add(this.rim2);
 
@@ -965,7 +981,7 @@ class GachaEngine {
     // The single biggest "AAA" lever: physically-plausible glow bleed.
     // Threshold is deliberately high — only genuinely hot pixels (throats,
     // energy pad, warp streaks) bloom, so the hull keeps its PBR detail.
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.34, 0.3, 0.78);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.26, 0.28, 0.82);
     this.composer.addPass(this.bloom);
 
     this.composer.addPass(new OutputPass());
@@ -1344,6 +1360,113 @@ class GachaEngine {
       this.nozzles.push({ x: e.x, z: e.z, r: e.r, y: engineY - 0.36 });
     }
 
+    /* ==== per-tier distinguishing features (make each ship its own model) ==== */
+    const feat = spec.feat || [];
+    this.animParts = [];   // parts the loop animates (spinning cores, blinking lights)
+
+    // ARMOR PLATES — heavy overlapping side plates (LV3/LV5): a bulky, armoured read
+    if (feat.includes('armor')) {
+      for (const side of [1, -1]) {
+        for (let i = 0; i < 3; i++) {
+          const plate = new THREE.Mesh(
+            new THREE.BoxGeometry(R * 0.5, H * 0.16, 0.12), M.goldDeep
+          );
+          const ang = side * 0.55;
+          plate.position.set(Math.sin(ang) * R * 1.02, -H * 0.02 - i * H * 0.15, Math.cos(ang) * R * 1.02);
+          plate.rotation.y = -ang;
+          plate.rotation.x = 0.05;
+          plate.castShadow = true;
+          g.add(plate);
+        }
+      }
+    }
+
+    // VENTS — glowing heat-vent slits low on the flanks (LV3/LV5)
+    if (feat.includes('vents')) {
+      const ventMat = new THREE.MeshBasicMaterial({ color: spec.flameEdge });
+      this.disposables.push(ventMat);
+      for (const side of [1, -1]) {
+        for (let i = 0; i < 4; i++) {
+          const vent = new THREE.Mesh(new THREE.BoxGeometry(R * 0.34, 0.05, 0.04), ventMat);
+          const ang = side * 0.62;
+          vent.position.set(Math.sin(ang) * R * 1.0, -H * 0.28 + i * 0.11, Math.cos(ang) * R * 1.0);
+          vent.rotation.y = -ang;
+          g.add(vent);
+        }
+      }
+    }
+
+    // ENERGY CORES — spinning glowing ring cores on the shoulders (LV4/LV5)
+    if (feat.includes('cores')) {
+      const coreMat = new THREE.MeshBasicMaterial({
+        color: spec.accent, transparent: true, opacity: 0.9,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      });
+      this.disposables.push(coreMat);
+      for (const side of [1, -1]) {
+        const core = new THREE.Mesh(new THREE.TorusGeometry(R * 0.26, 0.05, 8, 24), coreMat);
+        core.position.set(side * R * 0.62, H * 0.12, R * 0.55);
+        core.userData.spin = side * 3.2;
+        g.add(core);
+        this.animParts.push(core);
+        this.disposables.push(core.geometry);
+      }
+    }
+
+    // SIDE STABILIZERS — canard fins high on the hull (LV5 hero read)
+    if (feat.includes('stabilizers')) {
+      const stabGeo = new THREE.BoxGeometry(R * 1.1, 0.1, 0.34);
+      this.disposables.push(stabGeo);
+      for (const side of [1, -1]) {
+        const stab = new THREE.Mesh(stabGeo, M.gold);
+        stab.position.set(side * R * 1.3, H * 0.2, 0);
+        stab.rotation.z = side * 0.28;
+        stab.castShadow = true;
+        g.add(stab);
+        const tipMat = new THREE.MeshBasicMaterial({ color: spec.flameEdge });
+        this.disposables.push(tipMat);
+        const tip = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8), tipMat);
+        tip.position.set(side * R * 1.85, H * 0.2 + side * side * 0.05, 0);
+        g.add(tip);
+        this.animParts.push({ mesh: tip, blink: true, mat: tipMat });
+      }
+    }
+
+    // TOP ANTENNA STRUCTURES — comms mast + blinking beacon on the nose (LV5)
+    if (feat.includes('antenna')) {
+      const mast = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.05, H * 0.5, 8), M.gold
+      );
+      mast.position.y = H * 0.5 + spec.noseLen + 0.2;
+      g.add(mast);
+      const beaconMat = new THREE.MeshBasicMaterial({ color: 0xff4444 });
+      this.disposables.push(beaconMat);
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 8), beaconMat);
+      beacon.position.y = H * 0.5 + spec.noseLen + 0.46;
+      g.add(beacon);
+      this.animParts.push({ mesh: beacon, blink: true, mat: beaconMat });
+      // two angled side antennas
+      for (const side of [1, -1]) {
+        const a = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, H * 0.28, 6), M.goldDeep);
+        a.position.set(side * R * 0.4, H * 0.5 + spec.noseLen * 0.4, 0);
+        a.rotation.z = side * 0.5;
+        g.add(a);
+      }
+    }
+
+    // ENERGY STRIPS — glowing accent lines down the hull (LV2/LV4)
+    if (feat.includes('strips')) {
+      const stripMat = new THREE.MeshBasicMaterial({ color: spec.flameEdge });
+      this.disposables.push(stripMat);
+      for (const side of [1, -1]) {
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(0.04, H * 0.44, 0.03), stripMat);
+        const ang = side * 0.4;
+        strip.position.set(Math.sin(ang) * R * 1.0, 0, Math.cos(ang) * R * 1.0);
+        strip.rotation.y = -ang;
+        g.add(strip);
+      }
+    }
+
     return g;
   }
 
@@ -1544,11 +1667,13 @@ class GachaEngine {
     // Re-fit the camera: each tier has its own proportions.
     this._frameCamera();
 
-    // recolour the level-driven lighting + pedestal
+    // recolour the level-driven lighting + pedestal.
+    // rim2 stays a neutral cool white — keeping BOTH rims level-tinted was what
+    // wrapped the hull in a heavy coloured halo. One tinted rim is enough.
     const c = new THREE.Color(spec.accent);
     this.rim.color.copy(c);
-    if (this.rim2) this.rim2.color.copy(c);
     this.engineLight.color.copy(new THREE.Color(spec.flameEdge));
+    this.flight = FLIGHT[level] || FLIGHT[4];
     this.ringA.material.color.copy(c);
     this.padTrim.color.copy(c);
     this.ringB.material.color.copy(c);
@@ -1593,7 +1718,7 @@ class GachaEngine {
 
   _fireLiftoff() {
     this._fired = true;
-    this.shake = 1.0;
+    this.shake = (this.flight || FLIGHT[4]).shake;   // per-tier camera punch
     this.shock.visible = true;
     this._shockT = 0;
 
@@ -1697,35 +1822,41 @@ class GachaEngine {
       this._launchT += dt;
       const p = Math.min(this._launchT / this._launchDur, 1);
 
+      const F = this.flight || FLIGHT[4];
       if (p < this._chargeEnd) {
-        // CHARGE: engines spool up smoothly, pad surges, ship dips to crouch
+        // CHARGE: engines spool up smoothly, pad surges, ship dips to crouch.
+        // Deeper crouch for the heavy lifter, barely any for the agile scout.
         const v = p / this._chargeEnd;
         const ev = v * v * (3 - 2 * v);                       // smoothstep
         this.targetThrottle = 0.4 + ev * 0.45;
-        this.shipRoot.position.y = SHIP_LIFT - 0.18 * ev;     // squat before the leap
+        const crouch = F.style === 'heavy' ? 0.28 : F.style === 'zip' ? 0.08 : 0.18;
+        this.shipRoot.position.y = SHIP_LIFT - crouch * ev;
         this.shipRoot.position.x = 0;
         this.shipRoot.rotation.set(0, 0, 0);
         this.padSurge = ev;
       } else if (p < this._igniteEnd) {
-        // IGNITION: full throttle, controlled hold-down rumble (smooth, not noisy)
+        // IGNITION: full throttle, hold-down rattle scaled per tier (heavy shakes
+        // hard, scout barely holds down before it bolts).
         const v = (p - this._chargeEnd) / (this._igniteEnd - this._chargeEnd);
         this.targetThrottle = 1.0;
-        const rumble = 0.05 * (1 - v) + 0.03;                 // eases off toward release
-        this.shipRoot.position.y = SHIP_LIFT - 0.18 + v * 0.24
-          + Math.sin(t * 60) * rumble;                        // periodic, not random -> smooth
+        const rumble = (0.05 * (1 - v) + 0.03) * F.vibrate;
+        this.shipRoot.position.y = SHIP_LIFT - 0.18 + v * 0.24 + Math.sin(t * 60) * rumble;
         this.shipRoot.position.x = Math.sin(t * 47) * rumble * 0.5;
         this.padSurge = 1;
         if (!this._fired && v > 0.86) this._fireLiftoff();
       } else {
-        // LIFT: smooth accelerating climb with ONE graceful roll, eased in
+        // LIFT: per-tier climb. climbPow shapes the acceleration (heavy is slow
+        // and ponderous, scout is explosive), rollTurns sets the barrel rolls,
+        // sway adds a side weave for the agile ships.
         if (!this._fired) this._fireLiftoff();
         this.targetWarp = 1.0;
         const c = (p - this._igniteEnd) / (1 - this._igniteEnd);
-        const acc = c * c * c;                                // clean cubic ease-in
+        const acc = Math.pow(c, F.climbPow);
         this.shipRoot.position.y = SHIP_LIFT + 0.06 + acc * 36;
-        this.shipRoot.position.x = 0;
-        // a single smooth 360 roll over the ascent, eased — no runaway spin
-        this.shipRoot.rotation.y = (c * c) * Math.PI * 2;
+        // agile ships weave side to side on the way up
+        this.shipRoot.position.x = Math.sin(c * Math.PI * 2.2) * F.sway * (1 - c);
+        this.shipRoot.rotation.y = (c * c) * Math.PI * 2 * F.rollTurns;
+        this.shipRoot.rotation.z = this.shipRoot.position.x * -0.12;  // bank into the weave
         this.shipRoot.scale.setScalar(1 - c * 0.35);
       }
 
@@ -1782,10 +1913,26 @@ class GachaEngine {
       }
     }
 
-    // ---- flame plumes lengthen with throttle
+    // ---- flame plumes lengthen with throttle, scaled per tier (LV1 small,
+    //      LV5 huge volumetric). Width breathes so the plume feels alive.
     if (this.flames) {
-      const s = 0.92 + this.throttle * 1.2;
-      for (const f of this.flames) f.scale.set(1, s, 1);
+      const fs = (this.spec && this.spec.flameScale) || 1;
+      const s = (0.92 + this.throttle * 1.2) * fs;
+      const wob = 1 + Math.sin(t * 22) * 0.05;
+      for (const f of this.flames) f.scale.set(wob, s, wob);
+    }
+
+    // ---- animated ship parts: spinning energy cores, blinking beacons
+    if (this.animParts) {
+      for (const a of this.animParts) {
+        if (a.spin !== undefined) { a.rotation.z += dt * a.spin; }
+        else if (a.userData && a.userData.spin) { a.rotation.z += dt * a.userData.spin; }
+        else if (a.blink) {
+          const on = (Math.sin(t * 5) > 0) ? 1 : 0.2;
+          a.mat.opacity = on; a.mat.transparent = true;
+          a.mesh.scale.setScalar(0.7 + on * 0.5);
+        }
+      }
     }
 
     // ---- engine light pulses with throttle
@@ -1863,7 +2010,7 @@ class GachaEngine {
     }
 
     // ---- bloom swells with throttle so launches feel hot
-    this.bloom.strength = 0.3 + this.throttle * 0.38 + this.warp * 0.35;
+    this.bloom.strength = 0.22 + this.throttle * 0.3 + this.warp * 0.3;
 
     this.composer.render();
   }

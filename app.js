@@ -423,6 +423,15 @@
         modSpeed = 22;
         engineOscType = "square"; // Aggressive square synth drive
         filterQ = 9.0;
+      } else if (level === 5) { // Level 5 OVERLORD: deep cinematic legendary engine
+        chargeFreqStart = 34;    // starts sub-bass low for a heavy power-up
+        chargeFreqEnd = 2800;    // sweeps highest
+        subFreq = 32;            // deepest ground-shaking rumble
+        subVolume = 1.9;         // loudest bass
+        roarVolume = 1.95;       // biggest exhaust roar
+        modSpeed = 16;
+        engineOscType = "sawtooth";
+        filterQ = 8.0;
       }
 
       // 2. AAA Sci-Fi Reactor Power buildup whirring (0.0s - 0.45s)
