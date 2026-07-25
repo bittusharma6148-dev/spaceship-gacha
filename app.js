@@ -179,6 +179,17 @@
     loadSoundAssets();
   }, { once: true });
 
+  // Per-level idle-engine identity: every ship hums like a different machine.
+  // f1/f2 = engine tones · types = oscillator characters · lp = lowpass ceiling
+  // · lfo = breathing rate · vol = loudness (rises with tier).
+  const HUM = {
+    1: { f1: 118, f2: 118.8, t1: "sine",     t2: "sine",     lp: 220, lfo: 0.22, depth: 18, vol: 0.028 }, // scout: soft electric drone
+    2: { f1: 86,  f2: 129.5, t1: "sawtooth", t2: "triangle", lp: 320, lfo: 0.6,  depth: 45, vol: 0.038 }, // interceptor: turbine buzz
+    3: { f1: 41,  f2: 41.6,  t1: "sawtooth", t2: "square",   lp: 110, lfo: 0.12, depth: 22, vol: 0.06  }, // heavy: deep reactor rumble
+    4: { f1: 66,  f2: 99.2,  t1: "square",   t2: "sine",     lp: 260, lfo: 3.4,  depth: 60, vol: 0.045 }, // elite: crackling fusion field
+    5: { f1: 30,  f2: 45.3,  t1: "sine",     t2: "sawtooth", lp: 95,  lfo: 0.4,  depth: 30, vol: 0.075 }  // legendary: cinematic reactor
+  };
+
   function startAmbientHum() {
     if (!state.soundOn || ambientHumOsc || !audioCtx) return;
     if (audioCtx.state === "suspended") {
@@ -186,30 +197,29 @@
     }
 
     try {
+      const H = HUM[state.activeLevel] || HUM[4];
+
       ambientHumOsc = audioCtx.createOscillator();
       ambientHumOsc2 = audioCtx.createOscillator();
       ambientHumLfo = audioCtx.createOscillator();
-      
+
       const lfoGain = audioCtx.createGain();
       ambientHumGain = audioCtx.createGain();
       const filter = audioCtx.createBiquadFilter();
 
-      // Osc 1: Deep primary engine hum (Low A1 sine)
-      ambientHumOsc.type = "sine";
-      ambientHumOsc.frequency.setValueAtTime(55, audioCtx.currentTime);
+      ambientHumOsc.type = H.t1;
+      ambientHumOsc.frequency.setValueAtTime(H.f1, audioCtx.currentTime);
 
-      // Osc 2: Detuned harmonic (Low triangle wave to create warm physical beats)
-      ambientHumOsc2.type = "triangle";
-      ambientHumOsc2.frequency.setValueAtTime(55.4, audioCtx.currentTime);
+      ambientHumOsc2.type = H.t2;
+      ambientHumOsc2.frequency.setValueAtTime(H.f2, audioCtx.currentTime);
 
-      // Filter modulation LFO: slowly opens and closes the lowpass filter for a breathing ship cabin sound
+      // breathing LFO on the filter cutoff — rate/depth define the machine's pulse
       ambientHumLfo.type = "sine";
-      ambientHumLfo.frequency.setValueAtTime(0.08, audioCtx.currentTime); // 0.08Hz slow breathing cycle
-      lfoGain.gain.setValueAtTime(32, audioCtx.currentTime); // sweep range +/- 32Hz
+      ambientHumLfo.frequency.setValueAtTime(H.lfo, audioCtx.currentTime);
+      lfoGain.gain.setValueAtTime(H.depth, audioCtx.currentTime);
 
-      // Base low-pass filter to restrict hum to deep sub-frequencies
       filter.type = "lowpass";
-      filter.frequency.setValueAtTime(80, audioCtx.currentTime);
+      filter.frequency.setValueAtTime(H.lp, audioCtx.currentTime);
 
       // Connect LFO sweep modulation to filter cutoff frequency
       ambientHumLfo.connect(lfoGain);
@@ -223,8 +233,10 @@
       filter.connect(ambientHumGain);
       ambientHumGain.connect(audioCtx.destination);
 
-      // Warm background volume setting
-      ambientHumGain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+      // fade in over 0.4s so level swaps crossfade instead of clicking
+      const H2 = HUM[state.activeLevel] || HUM[4];
+      ambientHumGain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      ambientHumGain.gain.linearRampToValueAtTime(H2.vol, audioCtx.currentTime + 0.4);
 
       // Start all nodes
       ambientHumOsc.start(0);
@@ -288,6 +300,8 @@
     else if (type === "entry") {
       // AAA arrival: a descending warp whoosh (~0.5s) that lands on a deep
       // impact boom — the sound of the ship dropping onto the deck.
+      // Pitched per tier: scout arrives light and airy, legendary slams low.
+      const lvF = { 1: 1.6, 2: 1.25, 3: 0.75, 4: 1.0, 5: 0.55 }[state.activeLevel] || 1;
       osc.disconnect(gain);
 
       // 1) whoosh: filtered noise sweeping down
@@ -299,8 +313,8 @@
       noise.buffer = buf;
       const nf = audioCtx.createBiquadFilter();
       nf.type = "bandpass";
-      nf.frequency.setValueAtTime(3200, now);
-      nf.frequency.exponentialRampToValueAtTime(320, now + 0.5);
+      nf.frequency.setValueAtTime(3200 * lvF, now);
+      nf.frequency.exponentialRampToValueAtTime(320 * lvF, now + 0.5);
       nf.Q.value = 1.4;
       const ng = audioCtx.createGain();
       ng.gain.setValueAtTime(0.0001, now);
@@ -314,8 +328,8 @@
       const boom = audioCtx.createOscillator();
       const bg = audioCtx.createGain();
       boom.type = "sine";
-      boom.frequency.setValueAtTime(180, now + 0.44);
-      boom.frequency.exponentialRampToValueAtTime(42, now + 0.7);
+      boom.frequency.setValueAtTime(180 * lvF, now + 0.44);
+      boom.frequency.exponentialRampToValueAtTime(Math.max(42 * lvF, 24), now + 0.7);
       bg.gain.setValueAtTime(0.0001, now + 0.44);
       bg.gain.linearRampToValueAtTime(0.7, now + 0.48);
       bg.gain.exponentialRampToValueAtTime(0.0001, now + 0.95);
@@ -326,8 +340,8 @@
       const ping = audioCtx.createOscillator();
       const pg = audioCtx.createGain();
       ping.type = "triangle";
-      ping.frequency.setValueAtTime(1400, now + 0.5);
-      ping.frequency.exponentialRampToValueAtTime(2600, now + 0.72);
+      ping.frequency.setValueAtTime(1400 * lvF, now + 0.5);
+      ping.frequency.exponentialRampToValueAtTime(2600 * lvF, now + 0.72);
       pg.gain.setValueAtTime(0.0001, now + 0.5);
       pg.gain.linearRampToValueAtTime(0.16, now + 0.55);
       pg.gain.exponentialRampToValueAtTime(0.0001, now + 0.85);
@@ -627,9 +641,14 @@
   function switchLevel(levelNum) {
     if (state.isSpinning) return;
 
-    // AAA arrival — the engine plays the warp-drop, this is its whoosh + boom
-    playSynthSound("entry");
     state.activeLevel = levelNum;
+
+    // AAA arrival — the engine plays the warp-drop, this is its whoosh + boom
+    // (activeLevel is set first so the sound picks THIS tier's identity)
+    playSynthSound("entry");
+
+    // idle hum crossfades to the new ship's engine character
+    if (state.soundOn && audioCtx) { stopAmbientHum(); startAmbientHum(); }
 
     // Trigger subtle viewport bump shake on level switch
     if (el.phoneScreenViewport) {

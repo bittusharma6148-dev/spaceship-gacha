@@ -33,7 +33,7 @@ const SHIP_LIFT = 0.7;
 
 // Downward camera pitch (radians) — the reference's 3/4 hero angle, which
 // reveals the deck top and the vortex ellipse instead of viewing them edge-on.
-const CAM_PITCH = 0.28;
+const CAM_PITCH = 0.34;
 
 const GOLD = 0xffb121;
 const GOLD_DEEP = 0xc9781a;
@@ -398,7 +398,7 @@ class GachaEngine {
 
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
-    this.camera = new THREE.PerspectiveCamera(34, w / h, 0.1, 400);
+    this.camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 400);
     // Provisional — _frameCamera() replaces these once a ship exists.
     this.camY = 0;
     this.camZ = 24;
@@ -951,6 +951,25 @@ class GachaEngine {
     this.ringB.position.y = 0.44;
     grp.add(this.ringB);
 
+    // ROTATING LIGHT STRIPS — a ring of emissive segments orbiting the deck
+    // edge, like a powered launch-station scanner. Animated in the loop.
+    this.padStrips = new THREE.Group();
+    const stripSegMat = new THREE.MeshBasicMaterial({
+      color: 0x35e6ff, transparent: true, opacity: 0.85,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    this.disposables.push(stripSegMat);
+    const stripSegGeo = new THREE.BoxGeometry(0.34, 0.05, 0.08);
+    this.disposables.push(stripSegGeo);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const seg = new THREE.Mesh(stripSegGeo, stripSegMat);
+      seg.position.set(Math.cos(a) * 2.48, 0.32, Math.sin(a) * 2.48);
+      seg.rotation.y = -a + Math.PI / 2;
+      this.padStrips.add(seg);
+    }
+    grp.add(this.padStrips);
+
     this.pedestal = grp;
     this.scene.add(grp);
 
@@ -1480,7 +1499,8 @@ class GachaEngine {
     // below this point and sits behind the opaque reward panel (as in the
     // reference), so the rocket reads big while the panel keeps its 25%.
     const box = new THREE.Box3().setFromObject(this.rocket);
-    box.expandByPoint(new THREE.Vector3(0, this.pedestal.position.y + 0.2, 0));
+    const pedBox = new THREE.Box3().setFromObject(this.pedestal);
+    box.union(pedBox);
 
     const worldH = Math.max(box.max.y - box.min.y, 0.001);
     const worldW = Math.max(box.max.x - box.min.x, 0.001);
@@ -1503,8 +1523,8 @@ class GachaEngine {
       if (reward) botPx = reward.getBoundingClientRect().top - cvs.top;
     } catch (_) {}
     // breathing margins so the nose/base never kiss the chrome
-    topPx += ch * 0.035;
-    botPx -= ch * 0.015;
+    topPx += ch * 0.034;
+    botPx -= ch * 0.052;
     const bandH = Math.max(botPx - topPx, 10);
     const centreFrac = ((topPx + botPx) / 2) / ch;
 
@@ -1516,7 +1536,7 @@ class GachaEngine {
 
     // …but cap by WIDTH so the wings never reach the level badges on the left.
     // Keep the ship within the central corridor (badges sit in the outer ~18%).
-    const maxWidthFrac = 0.64;
+    const maxWidthFrac = 0.66;
     const viewW = viewH * aspect;                 // world units across the view
     const wFrac = worldW / viewW;
     if (wFrac > maxWidthFrac) viewH *= wFrac / maxWidthFrac;  // pull back
@@ -1964,6 +1984,11 @@ class GachaEngine {
     }
     this.ringA.rotation.z += dt * surge * 3;     // rings spin up with the charge
     this.ringB.rotation.z -= dt * surge * 4;
+    // rotating scanner strips orbit the deck; faster while charging
+    if (this.padStrips) this.padStrips.rotation.y += dt * (0.5 + surge * 2.5);
+    // recessed glow channels breathe, and flare hard during the charge
+    if (this.padGlowRings) this.padGlowRings.opacity =
+      0.35 + Math.sin(t * 2.2) * 0.12 + surge * 0.45;
     this.pedestal.visible = !(this.isLaunching && this._launchT > this._launchDur * 0.75);
 
     // ---- shockwave
