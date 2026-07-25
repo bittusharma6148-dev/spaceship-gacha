@@ -951,25 +951,6 @@ class GachaEngine {
     this.ringB.position.y = 0.44;
     grp.add(this.ringB);
 
-    // ROTATING LIGHT STRIPS — a ring of emissive segments orbiting the deck
-    // edge, like a powered launch-station scanner. Animated in the loop.
-    this.padStrips = new THREE.Group();
-    const stripSegMat = new THREE.MeshBasicMaterial({
-      color: 0x35e6ff, transparent: true, opacity: 0.85,
-      blending: THREE.AdditiveBlending, depthWrite: false
-    });
-    this.disposables.push(stripSegMat);
-    const stripSegGeo = new THREE.BoxGeometry(0.34, 0.05, 0.08);
-    this.disposables.push(stripSegGeo);
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * Math.PI * 2;
-      const seg = new THREE.Mesh(stripSegGeo, stripSegMat);
-      seg.position.set(Math.cos(a) * 2.48, 0.32, Math.sin(a) * 2.48);
-      seg.rotation.y = -a + Math.PI / 2;
-      this.padStrips.add(seg);
-    }
-    grp.add(this.padStrips);
-
     this.pedestal = grp;
     this.scene.add(grp);
 
@@ -1984,11 +1965,6 @@ class GachaEngine {
     }
     this.ringA.rotation.z += dt * surge * 3;     // rings spin up with the charge
     this.ringB.rotation.z -= dt * surge * 4;
-    // rotating scanner strips orbit the deck; faster while charging
-    if (this.padStrips) this.padStrips.rotation.y += dt * (0.5 + surge * 2.5);
-    // recessed glow channels breathe, and flare hard during the charge
-    if (this.padGlowRings) this.padGlowRings.opacity =
-      0.35 + Math.sin(t * 2.2) * 0.12 + surge * 0.45;
     this.pedestal.visible = !(this.isLaunching && this._launchT > this._launchDur * 0.75);
 
     // ---- shockwave

@@ -21,7 +21,7 @@
     }
   }
   </script>
-  <!-- WebGL Canvas Optic Flare & Particle Stage -->
+  <script type="module" src="engine3d.js"></script>
 </head>
 <body>
 
@@ -225,24 +225,8 @@
               </button>
             </div>
 
-            <!-- Pedestal & Launchpad -->
-            <div class="pedestal-container" id="pedestal-element">
-              <img src="assets/pedestal.png?v=3" class="pedestal-img" alt="Pedestal">
-              <div class="pedestal-tech-ring">
-                <svg viewBox="0 0 100 30" style="width: 100%; height: 100%; display: block; overflow: visible;">
-                  <ellipse cx="50" cy="15" rx="46" ry="11" stroke="var(--level-color)" stroke-width="1.5" stroke-dasharray="12 8" fill="none" style="filter: drop-shadow(0 0 5px var(--level-glow)); transition: stroke 0.3s ease, filter 0.3s ease;"/>
-                  <ellipse cx="50" cy="15" rx="38" ry="9" stroke="var(--level-color)" stroke-width="0.8" stroke-opacity="0.65" fill="none" style="transition: stroke 0.3s ease;"/>
-                </svg>
-              </div>
-              <div class="pedestal-glow"></div>
-              <div class="shockwave-ring" id="shockwave"></div>
-              <div class="hologram-cone" id="hologram"></div>
-            </div>
-            
-            <!-- 3D Raytraced Dreadnought Spaceship Container -->
-            <div class="spaceship-wrapper" id="spaceship-container">
-              <img src="assets/ship_lv2.png" class="spaceship-img float-anim" id="spaceship-view-img" alt="Spaceship" style="position: absolute; width: 90%; height: 90%; object-fit: contain; z-index: 4; pointer-events: none;">
-            </div>
+            <!-- Ship, pedestal, thrusters and shockwave are REAL 3D geometry.
+                 They live in #stage-3d (WebGL) — no sprites, no CSS fakes. -->
 
             <div class="flash-overlay" id="launch-flash" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, #ffffff 10%, var(--level-color) 60%, transparent 100%); z-index: 9; opacity: 0; pointer-events: none; mix-blend-mode: screen; filter: blur(5px);"></div>
           </div>
@@ -341,7 +325,7 @@
             </div>
           </div>
 
-          <!-- Bottom Action Buttons: Spin, Ranking & SVGA Exporter -->
+          <!-- Bottom Action Buttons: Spin & Ranking (Both styled as cyan trapezoidal buttons) -->
           <div class="action-footer">
             <button class="btn-action-primary" id="btn-spin">
               <span class="btn-glow-bar"></span>
@@ -350,10 +334,6 @@
             <button class="btn-action-sub" id="btn-ranking-trigger">
               Ranking
             </button>
-            <a href="assets/spaceship_gacha_event.svga" download="spaceship_gacha_event.svga" class="btn-action-sub" id="btn-download-svga" style="text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(0, 229, 255, 0.14); border: 1.5px solid #00e5ff; color: #00e5ff; font-weight: 800; text-transform: uppercase;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              <span>DOWNLOAD .SVGA ANIMATION</span>
-            </a>
           </div>
           </div>
 

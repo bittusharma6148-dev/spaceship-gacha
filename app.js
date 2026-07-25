@@ -179,9 +179,7 @@
     loadSoundAssets();
   }, { once: true });
 
-  // Per-level idle-engine identity: every ship hums like a different machine.
-  // f1/f2 = engine tones · types = oscillator characters · lp = lowpass ceiling
-  // · lfo = breathing rate · vol = loudness (rises with tier).
+  // Per-level idle-engine identity — every ship hums like a different machine.
   const HUM = {
     1: { f1: 118, f2: 118.8, t1: "sine",     t2: "sine",     lp: 220, lfo: 0.22, depth: 18, vol: 0.028 }, // scout: soft electric drone
     2: { f1: 86,  f2: 129.5, t1: "sawtooth", t2: "triangle", lp: 320, lfo: 0.6,  depth: 45, vol: 0.038 }, // interceptor: turbine buzz
@@ -233,10 +231,9 @@
       filter.connect(ambientHumGain);
       ambientHumGain.connect(audioCtx.destination);
 
-      // fade in over 0.4s so level swaps crossfade instead of clicking
-      const H2 = HUM[state.activeLevel] || HUM[4];
+      // Warm background volume setting
       ambientHumGain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-      ambientHumGain.gain.linearRampToValueAtTime(H2.vol, audioCtx.currentTime + 0.4);
+      ambientHumGain.gain.linearRampToValueAtTime(H.vol, audioCtx.currentTime + 0.4);
 
       // Start all nodes
       ambientHumOsc.start(0);
@@ -300,8 +297,6 @@
     else if (type === "entry") {
       // AAA arrival: a descending warp whoosh (~0.5s) that lands on a deep
       // impact boom — the sound of the ship dropping onto the deck.
-      // Pitched per tier: scout arrives light and airy, legendary slams low.
-      const lvF = { 1: 1.6, 2: 1.25, 3: 0.75, 4: 1.0, 5: 0.55 }[state.activeLevel] || 1;
       osc.disconnect(gain);
 
       // 1) whoosh: filtered noise sweeping down
@@ -313,8 +308,8 @@
       noise.buffer = buf;
       const nf = audioCtx.createBiquadFilter();
       nf.type = "bandpass";
-      nf.frequency.setValueAtTime(3200 * lvF, now);
-      nf.frequency.exponentialRampToValueAtTime(320 * lvF, now + 0.5);
+      nf.frequency.setValueAtTime(3200, now);
+      nf.frequency.exponentialRampToValueAtTime(320, now + 0.5);
       nf.Q.value = 1.4;
       const ng = audioCtx.createGain();
       ng.gain.setValueAtTime(0.0001, now);
@@ -328,8 +323,8 @@
       const boom = audioCtx.createOscillator();
       const bg = audioCtx.createGain();
       boom.type = "sine";
-      boom.frequency.setValueAtTime(180 * lvF, now + 0.44);
-      boom.frequency.exponentialRampToValueAtTime(Math.max(42 * lvF, 24), now + 0.7);
+      boom.frequency.setValueAtTime(180, now + 0.44);
+      boom.frequency.exponentialRampToValueAtTime(42, now + 0.7);
       bg.gain.setValueAtTime(0.0001, now + 0.44);
       bg.gain.linearRampToValueAtTime(0.7, now + 0.48);
       bg.gain.exponentialRampToValueAtTime(0.0001, now + 0.95);
@@ -340,8 +335,8 @@
       const ping = audioCtx.createOscillator();
       const pg = audioCtx.createGain();
       ping.type = "triangle";
-      ping.frequency.setValueAtTime(1400 * lvF, now + 0.5);
-      ping.frequency.exponentialRampToValueAtTime(2600 * lvF, now + 0.72);
+      ping.frequency.setValueAtTime(1400, now + 0.5);
+      ping.frequency.exponentialRampToValueAtTime(2600, now + 0.72);
       pg.gain.setValueAtTime(0.0001, now + 0.5);
       pg.gain.linearRampToValueAtTime(0.16, now + 0.55);
       pg.gain.exponentialRampToValueAtTime(0.0001, now + 0.85);
@@ -643,8 +638,7 @@
 
     state.activeLevel = levelNum;
 
-    // AAA arrival — the engine plays the warp-drop, this is its whoosh + boom
-    // (activeLevel is set first so the sound picks THIS tier's identity)
+    // AAA arrival whoosh + boom (activeLevel set first so it picks this tier)
     playSynthSound("entry");
 
     // idle hum crossfades to the new ship's engine character
